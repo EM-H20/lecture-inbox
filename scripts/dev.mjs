@@ -4,9 +4,11 @@ if (!existsSync('.venv/bin/python')) {
   console.error('먼저 npm run setup을 실행해 주세요.');
   process.exit(1);
 }
+const apiPort = process.env.API_PORT ?? '4318';
+const webPort = process.env.WEB_PORT ?? '4317';
 const children = [
-  spawn('.venv/bin/python', ['-m', 'uvicorn', 'server.app:app', '--host', '127.0.0.1', '--port', '4318', '--no-access-log'], { stdio: 'inherit' }),
-  spawn(process.execPath, ['../node_modules/vite/bin/vite.js', '--host', '127.0.0.1'], { stdio: 'inherit', cwd: 'client' }),
+  spawn('.venv/bin/python', ['-m', 'uvicorn', 'server.app:app', '--host', '127.0.0.1', '--port', apiPort, '--no-access-log'], { stdio: 'inherit' }),
+  spawn(process.execPath, ['../node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', webPort], { stdio: 'inherit', cwd: 'client' }),
 ];
 let closing = false;
 function stop(code = 0) {
