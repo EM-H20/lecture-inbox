@@ -46,7 +46,7 @@ class PipelineTests(unittest.TestCase):
 
     def test_writes_transcripts_and_work_order_and_removes_the_wav(self):
         paths, messages = self.run_pipeline(FakeEngine())
-        self.assertEqual([p.name for p in paths], ["week_01_02.md", "week_01_02.txt"])
+        self.assertEqual([p.name for p in paths], ["week_01_02.md"])
         self.assertEqual(paths[0].read_text(encoding="utf-8"), "[00:00:00] 안녕하세요\n")
         work_order = self.root / "output" / "강의" / "정리-작업.md"
         self.assertIn("정리 대기", work_order.read_text(encoding="utf-8"))

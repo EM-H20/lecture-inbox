@@ -1,7 +1,7 @@
 import unittest
 
 from server.lecture.repetition import find_repetition_span
-from server.lecture.transcript import Segment, Transcript, format_hms, to_markdown, to_plain_text
+from server.lecture.transcript import Segment, Transcript, format_hms, to_markdown
 
 LOOP = "같은 문장을 계속 반복합니다"
 
@@ -22,12 +22,8 @@ class FormatTests(unittest.TestCase):
     def test_markdown_has_one_timestamp_per_segment(self):
         self.assertEqual(to_markdown(self.transcript), "[00:00:00] 안녕하세요\n[01:02:05] 두 번째\n")
 
-    def test_plain_text_has_no_timestamps(self):
-        self.assertEqual(to_plain_text(self.transcript), "안녕하세요\n두 번째\n")
-
     def test_empty_transcript_is_empty_text(self):
-        empty = Transcript("m", "ko", "a.mp4", 1.0, [])
-        self.assertEqual((to_markdown(empty), to_plain_text(empty)), ("", ""))
+        self.assertEqual(to_markdown(Transcript("m", "ko", "a.mp4", 1.0, [])), "")
 
 
 class RepetitionTests(unittest.TestCase):

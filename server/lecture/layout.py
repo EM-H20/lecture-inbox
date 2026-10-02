@@ -4,10 +4,9 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from server.lecture.transcript import Transcript, to_markdown, to_plain_text
+from server.lecture.transcript import Transcript, to_markdown
 from server.school import safe_name
 
-EXTENSIONS = (".md", ".txt")
 
 
 class LayoutError(ValueError):
@@ -63,7 +62,8 @@ def lecture_stem(week: int, session: int) -> str:
 
 def existing_transcripts(root: Path, course: str, week: int, session: int) -> list[Path]:
     folder, stem = transcript_dir(root, course), lecture_stem(week, session)
-    return [folder / (stem + ext) for ext in EXTENSIONS if (folder / (stem + ext)).exists()]
+    path = folder / f"{stem}.md"
+    return [path] if path.exists() else []
 
 
 def ensure_free(root: Path, course: str, week: int, session: int) -> None:
@@ -74,18 +74,16 @@ def ensure_free(root: Path, course: str, week: int, session: int) -> None:
 
 def publish_transcript(root: Path, course: str, week: int, session: int, transcript: Transcript,
                        overwrite: bool = False) -> list[Path]:
-    """Write .md and .txt into a staging folder, then rename them into place."""
+    """Write the transcript into a staging folder, then rename it into place."""
     if not overwrite:
         ensure_free(root, course, week, session)
     folder, stem = transcript_dir(root, course), lecture_stem(week, session)
     folder.mkdir(parents=True, exist_ok=True)
-    texts = {".md": to_markdown(transcript), ".txt": to_plain_text(transcript)}
+    name = f"{stem}.md"
     staging = Path(tempfile.mkdtemp(prefix=".staging-", dir=folder))
     try:
-        for ext, text in texts.items():
-            (staging / (stem + ext)).write_text(text, encoding="utf-8")
-        for ext in texts:
-            os.replace(staging / (stem + ext), folder / (stem + ext))
+        (staging / name).write_text(to_markdown(transcript), encoding="utf-8")
+        os.replace(staging / name, folder / name)
     finally:
         shutil.rmtree(staging, ignore_errors=True)
-    return [folder / (stem + ext) for ext in texts]
+    return [folder / name]

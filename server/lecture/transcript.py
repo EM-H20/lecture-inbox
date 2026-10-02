@@ -29,7 +29,3 @@ def format_hms(seconds: float) -> str:
 
 def to_markdown(transcript: Transcript) -> str:
     return "".join(f"[{format_hms(s.start)}] {s.text}\n" for s in transcript.segments)
-
-
-def to_plain_text(transcript: Transcript) -> str:
-    return "".join(f"{s.text}\n" for s in transcript.segments)

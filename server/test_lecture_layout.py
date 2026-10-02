@@ -30,11 +30,10 @@ class LayoutTests(unittest.TestCase):
             with self.assertRaises(LayoutError):
                 lecture_stem(week, session)
 
-    def test_publish_writes_markdown_and_plain_text(self):
-        md, txt = self.publish()
-        self.assertEqual(md, self.root / "sources" / "자료구조" / "전사" / "week_01_02.md")
-        self.assertEqual(md.read_text(encoding="utf-8"), "[00:00:00] 안녕하세요\n")
-        self.assertEqual(txt.read_text(encoding="utf-8"), "안녕하세요\n")
+    def test_publish_writes_one_timestamped_markdown_file(self):
+        paths = self.publish()
+        self.assertEqual(paths, [self.root / "sources" / "자료구조" / "전사" / "week_01_02.md"])
+        self.assertEqual(paths[0].read_text(encoding="utf-8"), "[00:00:00] 안녕하세요\n")
 
     def test_course_name_cannot_escape_the_sources_folder(self):
         for name in ("../../evil", "/etc/passwd", "..", "a/../../b"):
@@ -47,20 +46,19 @@ class LayoutTests(unittest.TestCase):
                 self.publish(course=name)
 
     def test_existing_transcript_is_refused_and_left_untouched(self):
-        md, _ = self.publish(text="원래 내용")
+        [md] = self.publish(text="원래 내용")
         with self.assertRaises(TranscriptExists):
             self.publish(text="새 내용")
         self.assertEqual(md.read_text(encoding="utf-8"), "[00:00:00] 원래 내용\n")
 
-    def test_overwrite_replaces_both_files(self):
+    def test_overwrite_replaces_the_file(self):
         self.publish(text="원래 내용")
-        md, txt = self.publish(text="새 내용", overwrite=True)
+        [md] = self.publish(text="새 내용", overwrite=True)
         self.assertEqual(md.read_text(encoding="utf-8"), "[00:00:00] 새 내용\n")
-        self.assertEqual(txt.read_text(encoding="utf-8"), "새 내용\n")
 
     def test_no_staging_folder_is_left_behind(self):
-        md, _ = self.publish()
-        self.assertEqual(sorted(p.name for p in md.parent.iterdir()), ["week_01_02.md", "week_01_02.txt"])
+        [md] = self.publish()
+        self.assertEqual(sorted(p.name for p in md.parent.iterdir()), ["week_01_02.md"])
 
 
 class DocumentNameTests(unittest.TestCase):
