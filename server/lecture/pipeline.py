@@ -4,22 +4,27 @@ from pathlib import Path
 
 from server.lecture.audio import normalize_to_wav
 from server.lecture.layout import ensure_free, publish_transcript
-from server.lecture.pdf import PdfError, prepare_pages
+from server.lecture.pdf import prepare_pages
 from server.lecture.work_order import write_work_order
 
 log = logging.getLogger(__name__)
 
 
 def prepare_course(root: Path, course: str) -> list[str]:
-    """Render the 교안 pages (if a PDF exists) and rewrite 정리-작업.md. Returns status lines for the user."""
-    try:
-        result = prepare_pages(root, course)
-        note = {"missing": "교안 없음", "unchanged": f"교안 페이지 그대로 ({result.pages}장)",
-                "prepared": f"교안 페이지 {result.pages}장 생성"}[result.status]
-    except PdfError as error:
-        log.warning("교안 준비 실패: %s", error)
-        note = f"교안 준비 실패: {error}"
-    return [note, f"작업 목록: {write_work_order(root, course).relative_to(root).as_posix()}"]
+    """Render the pages of every 교안 document and rewrite 정리-작업.md. Returns status lines for the user."""
+    notes = []
+    results = prepare_pages(root, course)
+    if not results:
+        notes.append("교안 없음")
+    for result in results:
+        if result.status == "failed":
+            log.warning("교안 %s 준비 실패: %s", result.document, result.error)
+            notes.append(f"교안 '{result.document}' 준비 실패: {result.error}")
+        elif result.status == "unchanged":
+            notes.append(f"교안 '{result.document}': 페이지 그대로 ({result.pages}장)")
+        else:
+            notes.append(f"교안 '{result.document}': 페이지 {result.pages}장 생성")
+    return [*notes, f"작업 목록: {write_work_order(root, course).relative_to(root).as_posix()}"]
 
 
 def transcribe_lecture(root: Path, course: str, week: int, session: int, source: Path, engine, *,

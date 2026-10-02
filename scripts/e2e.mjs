@@ -155,9 +155,13 @@ async function main() {
   if (created.status !== 200 || created.body.name !== COURSE) fail(`강의 만들기 실패: ${JSON.stringify(created.body)}`);
   pass('강의 만들기');
 
-  const pdfResult = await call(`/api/local/courses/${encodeURIComponent(COURSE)}/pdf`, { method: 'PUT', body: readFileSync(slides) });
-  if (pdfResult.status !== 200 || pdfResult.body.pages !== 2) fail(`교안 업로드 실패: ${JSON.stringify(pdfResult.body)}`);
-  pass('교안 PDF 업로드 (2쪽 준비)');
+  for (const name of ['1주차.pdf', '2주차 실습.pdf']) { // several documents, one after another, like the UI does
+    const pdfResult = await call(`/api/local/courses/${encodeURIComponent(COURSE)}/documents/${encodeURIComponent(name)}`, { method: 'PUT', body: readFileSync(slides) });
+    if (pdfResult.status !== 200 || pdfResult.body.pages !== 2) fail(`교안 업로드 실패 (${name}): ${JSON.stringify(pdfResult.body)}`);
+  }
+  const listed = (await call('/api/local/courses')).body.courses.find((item) => item.name === COURSE);
+  if (listed?.documents?.length !== 2) fail(`교안 목록이 2개가 아닙니다: ${JSON.stringify(listed)}`);
+  pass('교안 PDF 2개 업로드 (각 2쪽 준비, 목록에 2개)');
 
   const started = await upload(sample, 1, 1, 'sample.aiff');
   if (started.status !== 202) fail(`영상 업로드 실패 (${started.status}): ${JSON.stringify(started.body)}`);

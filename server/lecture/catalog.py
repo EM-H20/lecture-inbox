@@ -2,7 +2,8 @@
 import re
 from pathlib import Path
 
-from server.lecture.pdf import PDF_NAME
+from server.lecture.layout import pages_dir
+from server.lecture.pdf import list_documents
 from server.school import safe_name
 
 STEM = re.compile(r"^week_([0-9]{2})_([0-9]{2})$")
@@ -21,6 +22,7 @@ def list_courses(root: Path) -> list[dict]:
             week, session = (int(part) for part in STEM.match(path.stem).groups())
             lectures.append({"stem": path.stem, "week": week, "session": session,
                              "hasNote": (root / "output" / folder.name / "notes" / path.name).is_file()})
-        courses.append({"name": folder.name, "hasPdf": (folder / PDF_NAME).is_file(),
-                        "pages": len(list((folder / "pages").glob("p*.png"))), "lectures": lectures})
+        documents = [{"name": name, "pages": len(list(pages_dir(root, folder.name, name).glob("p*.png")))}
+                     for name in list_documents(root, folder.name)]
+        courses.append({"name": folder.name, "documents": documents, "lectures": lectures})
     return courses

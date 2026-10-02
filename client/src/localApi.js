@@ -30,7 +30,7 @@ export async function localFetch(path, { method = 'GET', json, body, headers = {
 }
 
 // fetch() cannot report upload progress, so uploads use XMLHttpRequest. send(file) streams from disk.
-export function uploadFile(path, file, { headers = {}, onProgress, signal } = {}, XHR = XMLHttpRequest) {
+export function uploadFile(path, file, { headers = {}, onProgress, onSent, signal } = {}, XHR = XMLHttpRequest) {
   return new Promise((resolve, reject) => {
     const request = new XHR();
     request.open('PUT', path);
@@ -38,6 +38,8 @@ export function uploadFile(path, file, { headers = {}, onProgress, signal } = {}
     request.upload.onprogress = (event) => {
       if (event.lengthComputable) onProgress?.(event.loaded / event.total);
     };
+    // Over localhost the body is sent in an instant; the wait that follows is the server working.
+    request.upload.onload = () => onSent?.();
     request.onload = () => {
       let data = {};
       try { data = JSON.parse(request.responseText); } catch { /* not json */ }
@@ -60,6 +62,8 @@ export const JOB_LABELS = {
 export const isActive = (status) => ['waiting', 'converting', 'transcribing', 'saving'].includes(status);
 
 export const isLectureNumber = (value) => /^[0-9]{1,2}$/.test(String(value)) && Number(value) >= 1;
+
+export const documentPath = (course, name) => `/api/local/courses/${encodeURIComponent(course)}/documents/${encodeURIComponent(name)}`;
 
 export const stemOf = (week, session) => `week_${String(week).padStart(2, '0')}_${String(session).padStart(2, '0')}`;
 

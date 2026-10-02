@@ -2,7 +2,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from server.lecture.layout import LayoutError, TranscriptExists, lecture_stem, publish_transcript
+from server.lecture.layout import (
+    LayoutError, TranscriptExists, documents_dir, lecture_stem, pages_dir, publish_transcript, safe_document,
+)
 from server.lecture.transcript import Segment, Transcript
 
 
@@ -59,3 +61,24 @@ class LayoutTests(unittest.TestCase):
     def test_no_staging_folder_is_left_behind(self):
         md, _ = self.publish()
         self.assertEqual(sorted(p.name for p in md.parent.iterdir()), ["week_01_02.md", "week_01_02.txt"])
+
+
+class DocumentNameTests(unittest.TestCase):
+    def test_keeps_the_name_and_drops_the_pdf_extension(self):
+        self.assertEqual(safe_document("1주차.pdf"), "1주차")
+        self.assertEqual(safe_document("2주차 실습.PDF"), "2주차 실습")
+        self.assertEqual(safe_document("no extension"), "no extension")
+
+    def test_cannot_escape_its_folder(self):
+        for name in ("../../x.pdf", "/etc/passwd", "..", "a/b.pdf"):
+            self.assertNotIn("/", safe_document(name), name)
+
+    def test_blank_names_are_rejected(self):
+        for name in ("", "   ", ".pdf", " .PDF "):
+            with self.assertRaises(LayoutError):
+                safe_document(name)
+
+    def test_documents_and_their_pages_live_under_the_course(self):
+        root = Path("/project")
+        self.assertEqual(documents_dir(root, "자료구조"), root / "sources" / "자료구조" / "교안")
+        self.assertEqual(pages_dir(root, "자료구조", "1주차"), root / "sources" / "자료구조" / "pages" / "1주차")

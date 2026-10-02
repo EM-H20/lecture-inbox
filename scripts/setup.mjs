@@ -15,7 +15,7 @@ for (const [command, args] of commands) {
 // ZIP/clone에는 사용자 데이터 폴더가 없으므로 여기서 만든다 (git에는 올라가지 않는 폴더).
 for (const folder of ['sources', 'output', 'models']) mkdirSync(folder, { recursive: true });
 console.log(`폴더 준비 완료. 이렇게 사용합니다:
-  sources/강의이름/교안.pdf        ← 교안을 넣는 곳 (강의이름 폴더를 직접 만드세요)
+  sources/강의이름/교안/*.pdf      ← 교안을 넣는 곳 (여러 개 가능, 강의이름 폴더를 직접 만드세요)
   sources/강의이름/전사/week_03_01.md  ← 전사 결과 (3주차 1번째 강의)
   output/강의이름/notes/           ← 에이전트가 쓰는 정리 노트
   models/                          ← Whisper 모델`);

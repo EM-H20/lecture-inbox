@@ -19,9 +19,9 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
 from server.lecture.catalog import list_courses
-from server.lecture.layout import LayoutError, sources_dir, transcript_dir
+from server.lecture.layout import LayoutError, documents_dir, pages_dir, safe_document, sources_dir, transcript_dir
 from server.lecture.pdf import MAX_BYTES as MAX_PDF_BYTES
-from server.lecture.pdf import MAX_PAGES, PDF_NAME, PdfError, prepare_pages
+from server.lecture.pdf import MAX_PAGES, PdfError, delete_document, prepare_document
 from server.lecture.transcriber import Transcriber
 from server.lecture.work_order import write_work_order
 
@@ -143,35 +143,57 @@ def create_router() -> APIRouter:
             raise HTTPException(404, "전사체를 찾을 수 없습니다.")
         return {"stem": stem, "text": path.read_text(encoding="utf-8")}
 
-    @router.put("/courses/{course}/pdf")
-    async def upload_pdf(request: Request, course: str = PathParam(min_length=1, max_length=100),
-                         transcriber: Transcriber = Depends(get_transcriber)):
+    @router.put("/courses/{course}/documents/{name}")
+    async def upload_document(request: Request, course: str = PathParam(min_length=1, max_length=100),
+                              name: str = PathParam(min_length=1, max_length=200),
+                              transcriber: Transcriber = Depends(get_transcriber)):
         folder = course_folder(transcriber, course)
+        try:
+            document = safe_document(name)
+        except LayoutError as error:
+            raise HTTPException(400, str(error)) from None
         temp = await save_upload(request, transcriber.uploads_dir, ".pdf", MAX_PDF_BYTES)
         try:
             with temp.open("rb") as handle:
                 if handle.read(5) != b"%PDF-":
                     raise HTTPException(400, "PDF 파일이 아닙니다.")
             try:
-                document = pdfium.PdfDocument(str(temp))
+                pdf = pdfium.PdfDocument(str(temp))
                 try:
-                    pages = len(document)
+                    pages = len(pdf)
                 finally:
-                    document.close()
+                    pdf.close()
             except pdfium.PdfiumError:
                 raise HTTPException(422, "교안 PDF를 열 수 없습니다(손상되었거나 암호가 걸려 있을 수 있습니다).") from None
             if pages > MAX_PAGES:  # checked before replacing, so a refused PDF never overwrites the good one
                 raise HTTPException(422, f"교안 PDF 페이지가 너무 많습니다({pages}쪽, 최대 {MAX_PAGES}쪽).")
-            os.replace(temp, folder / PDF_NAME)
+            target = documents_dir(transcriber.root, folder.name)
+            target.mkdir(parents=True, exist_ok=True)
+            os.replace(temp, target / f"{document}.pdf")
         except BaseException:
             temp.unlink(missing_ok=True)
             raise
         try:
-            result = await run_in_threadpool(prepare_pages, transcriber.root, folder.name)
+            result = await run_in_threadpool(prepare_document, transcriber.root, folder.name, document)
         except PdfError as error:
+            shutil.rmtree(pages_dir(transcriber.root, folder.name, document), ignore_errors=True)  # stale pages of the old file
             raise HTTPException(422, str(error)) from None
         await run_in_threadpool(write_work_order, transcriber.root, folder.name)
-        return {"status": result.status, "pages": result.pages}
+        return {"document": document, "status": result.status, "pages": result.pages}
+
+    @router.delete("/courses/{course}/documents/{name}")
+    def remove_document(course: str = PathParam(min_length=1, max_length=100),
+                        name: str = PathParam(min_length=1, max_length=200),
+                        transcriber: Transcriber = Depends(get_transcriber)):
+        folder = course_folder(transcriber, course)
+        try:
+            document = safe_document(name)
+        except LayoutError as error:
+            raise HTTPException(400, str(error)) from None
+        if not delete_document(transcriber.root, folder.name, document):
+            raise HTTPException(404, "교안을 찾을 수 없습니다.")
+        write_work_order(transcriber.root, folder.name)
+        return {"ok": True}
 
     @router.put("/transcriptions", status_code=202)
     async def upload_video(request: Request, course: str = Query(min_length=1, max_length=100),

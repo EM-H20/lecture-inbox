@@ -9,6 +9,7 @@ from server.lecture.cli import main
 from server.lecture.layout import TranscriptExists
 from server.lecture.pipeline import transcribe_lecture
 from server.lecture.transcript import Segment, Transcript
+from server.lecture_testing import make_pdf
 
 
 class FakeEngine:
@@ -80,12 +81,21 @@ class PipelineTests(unittest.TestCase):
         self.assertFalse((self.root / "sources").exists())
 
     def test_bad_pdf_does_not_block_the_transcript(self):
-        sources = self.root / "sources" / "강의"
-        sources.mkdir(parents=True)
-        (sources / "교안.pdf").write_bytes(b"garbage")
+        documents = self.root / "sources" / "강의" / "교안"
+        documents.mkdir(parents=True)
+        (documents / "깨짐.pdf").write_bytes(b"garbage")
         paths, messages = self.run_pipeline(FakeEngine())
         self.assertTrue(paths[0].is_file())
-        self.assertTrue(any("교안 준비 실패" in m for m in messages))
+        self.assertTrue(any("'깨짐' 준비 실패" in m for m in messages))
+
+    def test_prepares_every_document_it_finds(self):
+        documents = self.root / "sources" / "강의" / "교안"
+        documents.mkdir(parents=True)
+        (documents / "1주차.pdf").write_bytes(make_pdf(["a", "b"]))
+        (documents / "2주차.pdf").write_bytes(make_pdf(["c"]))
+        _, messages = self.run_pipeline(FakeEngine())
+        self.assertTrue(any("'1주차'" in m and "2장 생성" in m for m in messages))
+        self.assertTrue(any("'2주차'" in m and "1장 생성" in m for m in messages))
 
     def test_missing_source_file(self):
         self.source.unlink()

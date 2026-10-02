@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  JOB_LABELS, LocalApiError, canStartTranscription, effectiveForce, findLecture, formatElapsed, formatSize, isActive,
-  isLectureNumber, lectureLabel, localFetch, stemOf, uploadFile,
+  JOB_LABELS, LocalApiError, canStartTranscription, documentPath, effectiveForce, findLecture, formatElapsed, formatSize,
+  isActive, isLectureNumber, lectureLabel, localFetch, stemOf, uploadFile,
 } from './localApi.js';
 
 const response = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
@@ -65,6 +65,17 @@ test('upload sends PUT with the marker, reports progress and resolves with the j
   assert.deepEqual(progress, [0.5]);
 });
 
+test('upload reports when the whole body has been sent, before the server answers', async () => {
+  const events = [];
+  const promise = uploadFile('/x', 'F', { onSent: () => events.push('sent') }, FakeXHR);
+  const xhr = FakeXHR.last;
+  xhr.upload.onload();
+  events.push('server still working');
+  xhr.status = 200; xhr.responseText = '{}'; xhr.onload();
+  await promise;
+  assert.deepEqual(events, ['sent', 'server still working']);
+});
+
 test('upload rejects with the server detail and status', async () => {
   const promise = uploadFile('/x', 'F', {}, FakeXHR);
   const xhr = FakeXHR.last;
@@ -119,4 +130,10 @@ test('starting needs a course, a file, valid numbers, overwrite consent and work
   assert.equal(canStartTranscription({ ...ok, video: null }), false);
   assert.equal(canStartTranscription({ ...ok, numbersOk: false }), false);
   assert.equal(canStartTranscription({ ...ok, uploading: true }), false);
+});
+
+test('document addresses encode Korean, spaces and characters that would change the path', () => {
+  assert.equal(documentPath('자료 구조', '2주차 실습.pdf'),
+    `/api/local/courses/${encodeURIComponent('자료 구조')}/documents/${encodeURIComponent('2주차 실습.pdf')}`);
+  assert.equal(documentPath('a', 'x#y%.pdf'), '/api/local/courses/a/documents/x%23y%25.pdf');
 });

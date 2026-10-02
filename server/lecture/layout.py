@@ -32,6 +32,24 @@ def sources_dir(root: Path, course: str) -> Path:
     return root / "sources" / safe_course(course)
 
 
+def safe_document(name: str) -> str:
+    """A 교안 document's name: the uploaded file name without its .pdf, cleaned to a single folder/file name."""
+    stem = name.strip()
+    if stem.lower().endswith(".pdf"):
+        stem = stem[:-4]
+    if not stem.strip():
+        raise LayoutError("교안 이름을 입력해 주세요.")
+    return safe_name(stem)
+
+
+def documents_dir(root: Path, course: str) -> Path:
+    return sources_dir(root, course) / "교안"
+
+
+def pages_dir(root: Path, course: str, document: str) -> Path:
+    return sources_dir(root, course) / "pages" / document
+
+
 def transcript_dir(root: Path, course: str) -> Path:
     return sources_dir(root, course) / "전사"  # transcripts are agent input, so they live with the 교안
 

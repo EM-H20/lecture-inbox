@@ -2,8 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import CoursePicker from './CoursePicker.jsx';
 import LectureFields from './LectureFields.jsx';
 import {
-  JOB_LABELS, canStartTranscription, effectiveForce, findLecture, formatElapsed, formatSize, isActive, isLectureNumber,
-  lectureLabel, localFetch, stemOf, uploadFile,
+  JOB_LABELS, canStartTranscription, documentPath, effectiveForce, findLecture, formatElapsed, formatSize, isActive,
+  isLectureNumber, lectureLabel, localFetch, stemOf, uploadFile,
 } from './localApi.js';
 import './transcribe.css';
 
@@ -18,13 +18,22 @@ export default function Transcribe({ active }) {
   const [video, setVideo] = useState(null);
   const [progress, setProgress] = useState(null); // 0..1 while a video uploads
   const [pdfProgress, setPdfProgress] = useState(null);
+  const [pdfBatch, setPdfBatch] = useState(null); // { current, total, name } while PDFs upload one after another
+  const [pdfProcessing, setPdfProcessing] = useState(false); // body sent, the server is still making the pages
+  const [pdfResults, setPdfResults] = useState([]); // per-file outcome of the last batch, shown next to the button
   const [message, setMessage] = useState(null); // { kind: 'error' | 'success', text }
   const [viewer, setViewer] = useState(null); // { course, stem, text }
   const [dragging, setDragging] = useState(false);
   const seenDone = useRef(new Set());
   const upload = useRef(null); // AbortController of the running video upload
+  const banner = useRef(null);
 
   const fail = (error) => setMessage({ kind: 'error', text: error.message });
+
+  // Errors appear at the top of the tab; make sure they are not left off-screen below the button that was pressed.
+  useEffect(() => {
+    if (message?.kind === 'error') banner.current?.scrollIntoView({ block: 'nearest' });
+  }, [message]);
 
   const reloadCourses = useCallback(async (select) => {
     const result = await localFetch('/api/local/courses');
@@ -67,17 +76,38 @@ export default function Transcribe({ active }) {
   const uploading = progress !== null;
   const canStart = canStartTranscription({ selected, video, numbersOk, uploading, existing, force, status });
 
-  async function sendPdf(file) {
+  async function sendPdfs(files) {
     setMessage(null);
-    setPdfProgress(0);
+    setPdfResults([]);
+    const results = [];
+    for (const [index, file] of files.entries()) {
+      setPdfBatch({ current: index + 1, total: files.length, name: file.name });
+      setPdfProgress(0);
+      setPdfProcessing(false);
+      try {
+        const result = await uploadFile(documentPath(course, file.name), file, {
+          onProgress: setPdfProgress, onSent: () => setPdfProcessing(true),
+        });
+        results.push({ name: file.name, ok: true, text: `${result.pages}쪽 준비 완료` });
+      } catch (error) {
+        results.push({ name: file.name, ok: false, text: error.message }); // keep going: one bad file must not block the rest
+      }
+      setPdfResults([...results]);
+    }
+    setPdfBatch(null);
+    setPdfProgress(null);
+    setPdfProcessing(false);
+    await reloadCourses().catch(() => {});
+  }
+
+  async function removeDocument(name) {
+    if (!window.confirm(`교안 '${name}'을(를) 삭제할까요? 쪽 이미지도 함께 지워집니다.`)) return;
     try {
-      const result = await uploadFile(`/api/local/courses/${encodeURIComponent(course)}/pdf`, file, { onProgress: setPdfProgress });
+      await localFetch(documentPath(course, name), { method: 'DELETE' });
+      setPdfResults([]);
       await reloadCourses();
-      setMessage({ kind: 'success', text: `교안을 저장했어요. ${result.pages}쪽을 준비했습니다.` });
     } catch (error) {
-      fail(error);
-    } finally {
-      setPdfProgress(null);
+      setPdfResults([{ name, ok: false, text: error.message }]);
     }
   }
 
@@ -117,7 +147,7 @@ export default function Transcribe({ active }) {
   }
 
   return <div className="local-grid">
-    <div className="banner-list" aria-live="polite">
+    <div className="banner-list" aria-live="polite" ref={banner}>
       {status && !status.whisper ? <div className="message error" role="alert">전사 프로그램을 쓸 수 없습니다. {status.whisperMessage}</div> : null}
       {status && !status.ffmpeg ? <div className="message error" role="alert">ffmpeg가 설치되어 있지 않습니다. 터미널에서 <code>brew install ffmpeg</code>를 실행해 주세요.</div> : null}
       {message ? <div className={`message ${message.kind === 'error' ? 'error' : 'success'}`} role={message.kind === 'error' ? 'alert' : 'status'}>{message.text}</div> : null}
@@ -128,14 +158,29 @@ export default function Transcribe({ active }) {
       <h2>어떤 강의인가요?</h2>
       <p className="muted">전사체와 교안은 <code>sources/강의이름/</code> 폴더에 저장됩니다.</p>
       <CoursePicker idPrefix="local" courses={courses} value={course} disabled={uploading}
-        onSelect={(name) => { setCourse(name); setForce(false); setViewer(null); }}
+        onSelect={(name) => { setCourse(name); setForce(false); setViewer(null); setPdfResults([]); }}
         onCreated={async (name) => { await reloadCourses(name); setMessage({ kind: 'success', text: `'${name}' 강의를 만들었어요.` }); }} />
       {selected ? <div className="pdf-state">
-        <span>{selected.hasPdf ? `교안 있음 · ${selected.pages}쪽 준비됨` : '교안 없음 (없어도 전사는 할 수 있어요)'}</span>
-        {pdfProgress !== null ? <span className="progress">교안 올리는 중 {Math.round(pdfProgress * 100)}%</span>
-          : <label className="file-button" aria-disabled={uploading}>{selected.hasPdf ? '교안 바꾸기' : '교안 PDF 올리기'}
-            <input type="file" accept="application/pdf,.pdf" disabled={uploading}
-              onChange={(event) => { const file = event.target.files[0]; event.target.value = ''; if (file) sendPdf(file); }} /></label>}
+        <div className="pdf-head">
+          <span>{selected.documents.length ? `교안 ${selected.documents.length}개` : '교안 없음 (없어도 전사는 할 수 있어요)'}</span>
+          {pdfBatch ? <span className="progress" role="status">
+            {pdfBatch.total > 1 ? `${pdfBatch.total}개 중 ${pdfBatch.current}번째 · ` : ''}{pdfBatch.name} — {pdfProcessing
+              ? '올리기 완료 · 쪽 이미지를 만드는 중입니다. 쪽 수가 많으면 1분 넘게 걸릴 수 있어요.'
+              : `올리는 중 ${Math.round(pdfProgress * 100)}%`}</span>
+            : <label className="file-button" aria-disabled={uploading}>교안 PDF 올리기 (여러 개 선택 가능)
+              <input type="file" multiple accept="application/pdf,.pdf" disabled={uploading}
+                onChange={(event) => { const files = [...event.target.files]; event.target.value = ''; if (files.length) sendPdfs(files); }} /></label>}
+        </div>
+        {selected.documents.length ? <ul className="doc-list" aria-label="올린 교안">
+          {selected.documents.map((doc) => <li key={doc.name}>
+            <span>{doc.name}</span><span className="muted">{doc.pages ? `${doc.pages}쪽` : '쪽 이미지 없음'}</span>
+            <button className="text-button" disabled={Boolean(pdfBatch)} onClick={() => removeDocument(doc.name)}>삭제</button>
+          </li>)}
+        </ul> : null}
+        {pdfResults.length ? <ul className="pdf-results" aria-label="교안 올리기 결과">
+          {pdfResults.map((result, index) => <li key={`${index}-${result.name}`} className={result.ok ? 'ok' : 'error'} role={result.ok ? 'status' : 'alert'}>
+            {result.ok ? '✓' : '!'} {result.name} — {result.text}</li>)}
+        </ul> : null}
       </div> : null}
     </section>
 

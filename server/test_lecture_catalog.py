@@ -16,13 +16,15 @@ class CatalogTests(unittest.TestCase):
     def test_missing_sources_folder_is_an_empty_list(self):
         self.assertEqual(list_courses(self.root), [])
 
-    def test_lists_pdf_pages_lectures_and_notes(self):
+    def test_lists_documents_pages_lectures_and_notes(self):
         course = self.root / "sources" / "자료구조"
-        (course / "pages").mkdir(parents=True)
+        (course / "pages" / "1주차").mkdir(parents=True)
         (course / "전사").mkdir()
-        (course / "교안.pdf").write_bytes(b"%PDF")
+        (course / "교안").mkdir()
+        (course / "교안" / "1주차.pdf").write_bytes(b"%PDF")
+        (course / "교안" / "2주차.pdf").write_bytes(b"%PDF")  # not prepared yet: 0 pages
         for name in ("p001.png", "p002.png"):
-            (course / "pages" / name).write_bytes(b"x")
+            (course / "pages" / "1주차" / name).write_bytes(b"x")
         (course / "전사" / "week_01_02.md").write_text("x", encoding="utf-8")
         (course / "전사" / "week_01_01.md").write_text("x", encoding="utf-8")
         (course / "전사" / "week_1_1.md").write_text("x", encoding="utf-8")  # misnamed: ignored
@@ -31,8 +33,8 @@ class CatalogTests(unittest.TestCase):
         (notes / "week_01_01.md").write_text("n", encoding="utf-8")
         (self.root / "sources" / "빈 강의").mkdir()
         self.assertEqual(list_courses(self.root), [
-            {"name": "빈 강의", "hasPdf": False, "pages": 0, "lectures": []},
-            {"name": "자료구조", "hasPdf": True, "pages": 2, "lectures": [
+            {"name": "빈 강의", "documents": [], "lectures": []},
+            {"name": "자료구조", "documents": [{"name": "1주차", "pages": 2}, {"name": "2주차", "pages": 0}], "lectures": [
                 {"stem": "week_01_01", "week": 1, "session": 1, "hasNote": True},
                 {"stem": "week_01_02", "week": 1, "session": 2, "hasNote": False}]},
         ])

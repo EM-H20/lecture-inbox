@@ -68,8 +68,9 @@ class GuardTests(WebTestCase):
         self.make_course()
         params = {"course": "강의", "week": 1, "session": 1}
         self.assertEqual(self.client.put("/api/local/transcriptions", params=params, content=b"x").status_code, 403)
-        self.assertEqual(self.client.put("/api/local/courses/강의/pdf", content=b"x").status_code, 403)
+        self.assertEqual(self.client.put("/api/local/courses/강의/documents/1주차.pdf", content=b"x").status_code, 403)
         self.assertEqual(self.client.delete("/api/local/transcriptions/abc").status_code, 403)
+        self.assertEqual(self.client.delete("/api/local/courses/강의/documents/1주차").status_code, 403)
 
     def test_other_sites_get_no_cors_permission(self):
         response = self.client.options("/api/local/transcriptions", headers={
@@ -109,7 +110,7 @@ class CourseTests(WebTestCase):
         again = self.client.post("/api/local/courses", json={"name": "자료구조"}, headers=H).json()
         self.assertEqual((first, again), ({"name": "자료구조", "created": True}, {"name": "자료구조", "created": False}))
         self.assertEqual(self.client.get("/api/local/courses").json()["courses"],
-                         [{"name": "자료구조", "hasPdf": False, "pages": 0, "lectures": []}])
+                         [{"name": "자료구조", "documents": [], "lectures": []}])
 
     def test_hostile_and_blank_names(self):
         name = self.client.post("/api/local/courses", json={"name": "../../x"}, headers=H).json()["name"]
@@ -152,49 +153,83 @@ class TranscriptViewTests(WebTestCase):
         self.assertEqual(self.client.get("/api/local/courses/강의/transcripts/passwd").status_code, 422)
 
 
-class PdfUploadTests(WebTestCase):
-    def put_pdf(self, content, course="강의"):
-        return self.client.put(f"/api/local/courses/{quote(course)}/pdf", content=content, headers=H)
+class DocumentTests(WebTestCase):
+    def put_doc(self, name, content, course="강의"):
+        return self.client.put(f"/api/local/courses/{quote(course)}/documents/{quote(name)}", content=content, headers=H)
 
-    def test_saves_the_pdf_and_prepares_pages(self):
+    def courses(self):
+        return self.client.get("/api/local/courses").json()["courses"]
+
+    def test_saves_the_document_and_prepares_its_pages(self):
         folder = self.make_course()
-        response = self.put_pdf(make_pdf(["Hello", "World"]))
-        self.assertEqual((response.status_code, response.json()), (200, {"status": "prepared", "pages": 2}))
-        self.assertTrue((folder / "교안.pdf").is_file())
-        self.assertTrue((folder / "pages" / "p002.png").is_file())
+        response = self.put_doc("1주차.pdf", make_pdf(["Hello", "World"]))
+        self.assertEqual((response.status_code, response.json()), (200, {"document": "1주차", "status": "prepared", "pages": 2}))
+        self.assertTrue((folder / "교안" / "1주차.pdf").is_file())
+        self.assertTrue((folder / "pages" / "1주차" / "p002.png").is_file())
         self.assertTrue((self.root / "output" / "강의" / "정리-작업.md").is_file())
         self.assertEqual(list(self.transcriber.uploads_dir.glob("*")), [])
 
+    def test_several_documents_live_side_by_side(self):
+        self.make_course()
+        self.put_doc("1주차.pdf", make_pdf(["a", "b"]))
+        self.put_doc("2주차 실습", make_pdf(["c"]))
+        self.assertEqual(self.courses()[0]["documents"], [{"name": "1주차", "pages": 2}, {"name": "2주차 실습", "pages": 1}])
+
+    def test_the_same_name_replaces_the_document(self):
+        folder = self.make_course()
+        self.put_doc("1주차.pdf", make_pdf(["a", "b", "c"]))
+        self.put_doc("1주차.pdf", make_pdf(["a"]))
+        self.assertEqual(self.courses()[0]["documents"], [{"name": "1주차", "pages": 1}])
+        self.assertFalse((folder / "pages" / "1주차" / "p002.png").exists())
+
+    def test_hostile_names_stay_inside_the_documents_folder(self):
+        folder = self.make_course()
+        self.assertEqual(self.put_doc("..hidden.pdf", make_pdf(["a"])).json()["document"], "hidden")
+        self.assertEqual(self.put_doc("a\\b.pdf", make_pdf(["a"])).json()["document"], "a_b")
+        self.assertEqual(sorted(p.name for p in (folder / "교안").iterdir()), ["a_b.pdf", "hidden.pdf"])
+        self.assertEqual(self.put_doc(".pdf", make_pdf(["a"])).status_code, 400)
+
     def test_a_non_pdf_is_refused_and_nothing_is_saved(self):
         folder = self.make_course()
-        self.assertEqual(self.put_pdf(b"hello").status_code, 400)
-        self.assertFalse((folder / "교안.pdf").exists())
+        self.assertEqual(self.put_doc("1주차.pdf", b"hello").status_code, 400)
+        self.assertEqual(list((folder / "교안").glob("*")) if (folder / "교안").exists() else [], [])
         self.assertEqual(list(self.transcriber.uploads_dir.glob("*")), [])
 
     def test_a_corrupt_pdf_is_refused_and_the_old_one_is_kept(self):
         folder = self.make_course()
         good = make_pdf(["Hello"])
-        self.put_pdf(good)
-        self.assertEqual(self.put_pdf(b"%PDF-1.4\ngarbage").status_code, 422)
-        self.assertEqual(hashlib.sha256((folder / "교안.pdf").read_bytes()).digest(), hashlib.sha256(good).digest())
-
-    def test_unknown_course_is_404(self):
-        self.assertEqual(self.put_pdf(make_pdf(["a"]), course="없는강의").status_code, 404)
+        self.put_doc("1주차.pdf", good)
+        self.assertEqual(self.put_doc("1주차.pdf", b"%PDF-1.4\ngarbage").status_code, 422)
+        self.assertEqual(hashlib.sha256((folder / "교안" / "1주차.pdf").read_bytes()).digest(), hashlib.sha256(good).digest())
 
     def test_a_pdf_with_too_many_pages_is_refused_and_the_old_one_is_kept(self):
         folder = self.make_course()
         good = make_pdf(["Hello"])
-        self.put_pdf(good)
+        self.put_doc("1주차.pdf", good)
         with patch("server.lecture.web.MAX_PAGES", 1):
-            response = self.put_pdf(make_pdf(["a", "b"]))
+            response = self.put_doc("1주차.pdf", make_pdf(["a", "b"]))
         self.assertEqual(response.status_code, 422)
-        self.assertEqual((folder / "교안.pdf").read_bytes(), good)
-        self.assertEqual(len(list((folder / "pages").glob("p*.png"))), 1)
+        self.assertEqual((folder / "교안" / "1주차.pdf").read_bytes(), good)
+        self.assertEqual(len(list((folder / "pages" / "1주차").glob("p*.png"))), 1)
+
+    def test_unknown_course_is_404(self):
+        self.assertEqual(self.put_doc("1주차.pdf", make_pdf(["a"]), course="없는강의").status_code, 404)
 
     def test_an_oversized_pdf_is_refused(self):
         self.make_course()
         with patch("server.lecture.web.MAX_PDF_BYTES", 10):
-            self.assertEqual(self.put_pdf(make_pdf(["a"])).status_code, 413)
+            self.assertEqual(self.put_doc("1주차.pdf", make_pdf(["a"])).status_code, 413)
+
+    def test_delete_removes_the_document_and_its_pages(self):
+        folder = self.make_course()
+        self.put_doc("1주차.pdf", make_pdf(["a"]))
+        self.put_doc("2주차.pdf", make_pdf(["b"]))
+        response = self.client.delete(f"/api/local/courses/{quote('강의')}/documents/{quote('1주차')}", headers=H)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.courses()[0]["documents"], [{"name": "2주차", "pages": 1}])
+        self.assertFalse((folder / "교안" / "1주차.pdf").exists() or (folder / "pages" / "1주차").exists())
+        again = self.client.delete(f"/api/local/courses/{quote('강의')}/documents/{quote('1주차')}", headers=H)
+        self.assertEqual(again.status_code, 404)
 
 
 class VideoUploadTests(WebTestCase):
