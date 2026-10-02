@@ -1,0 +1,34 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    environment:
+      FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:?Set your exact Vercel origin}
+      FILE_TTL_SECONDS: ${FILE_TTL_SECONDS:-1800}
+      SESSION_TTL_SECONDS: ${SESSION_TTL_SECONDS:-7200}
+      DOWNLOAD_ROOT: /data
+    volumes:
+      - downloads_tmp:/data
+    expose:
+      - '8000'
+    stop_grace_period: 45s
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      API_DOMAIN: ${API_DOMAIN:?Set your API domain}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+volumes:
+  downloads_tmp:
+  caddy_data:
+  caddy_config:
