@@ -28,43 +28,34 @@ lecture-inbox/
 사용자에 맞는 항목을 펼쳐 보세요.
 
 <details>
-<summary><b>비개발자용 — ZIP 파일로 실행하기 (Mac)</b></summary>
+<summary><b>비개발자용 — 설치 한 줄로 실행하기 (Mac)</b></summary>
 
-git 없이 ZIP 파일만으로 실행할 수 있습니다. `.venv/bin/python` 경로를 쓰므로 Windows는 WSL이 필요합니다. 아래 프로그램이 필요합니다.
+Windows는 지원하지 않습니다(`.venv/bin/python` 경로를 쓰므로 WSL이 필요합니다).
 
-| 프로그램 | 용도 | 필요 버전 |
-| --- | --- | --- |
-| Homebrew | 아래 프로그램을 설치하는 도구 | - |
-| Node.js (npm 포함) | 웹 화면 실행 | 22.12 이상 |
-| Python | 백엔드 서버 실행 | 3.10 이상 |
-| ffmpeg | 영상 변환·저장 | - |
+#### 처음 한 번만: 설치 (Node.js + 명령 한 줄)
 
-#### 처음 한 번만: 설치
-
-1. **ZIP 압축 풀기** — 받은 `lecture-inbox.zip`을 더블클릭해 풀고, 원하는 위치(예: 문서 폴더)로 옮깁니다.
-2. **터미널 열기** — `⌘ + Space` → `터미널` 입력 → Enter.
-3. **Homebrew 설치** — 이미 있으면 건너뜁니다(`brew -v`로 확인). 없으면 [brew.sh](https://brew.sh)의 설치 명령을 붙여넣고 안내를 따르세요. 끝날 때 출력되는 **Next steps** 명령 2~3줄도 반드시 복사해 실행해야 `brew` 명령이 인식됩니다.
-4. **필수 프로그램 설치**
+1. **Node.js 설치** — [nodejs.org](https://nodejs.org)에서 **LTS** 설치 파일(.pkg)을 받아 더블클릭하고 안내대로 진행합니다. 설치 후 터미널(`⌘ + Space` → `터미널` → Enter)에서 `node -v`를 쳐서 `v22.12` 이상이 나오면 됩니다. Homebrew가 이미 있다면 `brew install node`로도 됩니다.
+2. **설치 폴더를 둘 위치로 이동** — 예: `cd ~/Documents`
+3. **설치 명령**
 
    ```bash
-   brew install node python ffmpeg
+   npx github:EM-H20/lecture-inbox
    ```
 
-   설치 확인(각각 버전이 출력되면 정상):
+   현재 위치에 `lecture-inbox` 폴더를 만들고 설치까지 이어서 진행합니다(폴더 이름을 바꾸려면 명령 끝에 이름을 붙이세요). 이미 내용이 있는 폴더에는 설치하지 않습니다. 안에서 `setup.sh`가 하는 일은 이렇습니다.
+   - Homebrew, Python, ffmpeg, whisper-cpp 중 없는 것만 설치합니다. 시스템에 설치하기 전에는 항상 "설치할까요? (y/N)"로 먼저 묻습니다.
+   - 웹 화면 패키지와 Python 환경을 준비하고, `sources/`·`output/`·`models/` 폴더를 만듭니다.
+   - Whisper 모델(약 3GB)을 받을지 묻습니다.
 
-   ```bash
-   node -v && npm -v && python3 -V && ffmpeg -version
-   ```
+   **Homebrew가 없을 때** 설치 중에 이렇게 진행됩니다.
+   - `Press RETURN/ENTER to continue`가 나오면 **Enter**를 누릅니다.
+   - **Mac 비밀번호**를 묻습니다. 입력해도 화면에 안 보이는 게 정상입니다(관리자 계정이어야 합니다).
+   - 개발자 도구 설치 창이 뜨면 **설치**를 누르고 끝날 때까지 기다립니다(몇 분).
+   - 끝나면 스크립트가 알아서 이어서 진행합니다. 새 터미널에서도 `brew`를 쓰도록 `~/.zprofile`에 한 줄 추가할지 물어봅니다.
 
-5. **프로젝트 폴더로 이동** — 터미널에 `cd ` (뒤에 띄어쓰기)를 입력한 뒤 풀어 둔 `lecture-inbox` 폴더를 터미널 창으로 끌어다 놓고 Enter.
-6. **의존성 설치**
+   저장소가 공개되어 있어야 하고(`github:` 주소), 처음 실행에는 몇 분이 걸릴 수 있습니다.
 
-   ```bash
-   npm install
-   npm run setup
-   ```
-
-   `npm install`은 웹 화면용 패키지를, `npm run setup`은 프로젝트 안의 `.venv`에 Python 패키지를 설치합니다. 컴퓨터 전체 설정은 바꾸지 않습니다.
+ZIP 파일로 받았다면 압축을 풀고 터미널에서 그 폴더로 이동한 뒤(`cd ` 다음에 폴더를 터미널 창으로 끌어다 놓고 Enter) `bash setup.sh`를 실행하면 같은 설치가 진행됩니다.
 
 #### 실행
 
@@ -74,26 +65,27 @@ npm run dev
 
 브라우저에서 http://127.0.0.1:4317 을 엽니다. 이 명령 하나로 웹 화면(4317)과 Python 백엔드(4318)가 함께 실행됩니다. 종료는 터미널에서 **Control+C**(둘 다 종료됩니다).
 
-다음부터는 설치 없이 5번(폴더 이동)과 `npm run dev`만 하면 됩니다.
+처음 설치할 때 `npx`가 알려 준 대로 `cd lecture-inbox`로 들어가서 실행하세요. 다음부터는 설치 없이 이 폴더로 이동한 뒤 `npm run dev`만 하면 됩니다. 전사·교안 정리는 아래 "강의 전사와 교안 정리" 항목을 보세요.
 
 #### 문제 해결
 
 | 증상 | 해결 |
 | --- | --- |
-| `command not found: brew` | Homebrew 설치 마지막의 Next steps 명령을 실행했는지 확인하고 터미널을 새로 엽니다. |
-| `command not found: npm` / `node` | `brew install node` 후 터미널을 새로 엽니다. |
-| `먼저 npm run setup을 실행해 주세요.` | 프로젝트 폴더에서 `npm run setup`을 실행합니다. |
+| `command not found: npx` / `node` | Node.js를 설치하지 않았거나 설치 후 터미널을 새로 열지 않았습니다. 위 1번을 하고 터미널을 다시 엽니다. |
+| `command not found: brew` | 설치 폴더에서 `bash setup.sh`를 다시 실행하세요. 그래도 안 되면 터미널을 닫고 새로 엽니다. |
+| `먼저 npm run setup을 실행해 주세요.` | 프로젝트 폴더에서 `bash setup.sh`(또는 `npm run setup`)를 실행합니다. |
 | `address already in use` (4317/4318) | 이전 `npm run dev`가 아직 실행 중입니다. 그 터미널에서 Control+C로 끄세요. |
 | 화면은 뜨는데 영상 준비가 실패 | http://127.0.0.1:4318/api/health 에서 `"ffmpeg": true`인지 확인합니다. `false`면 `brew install ffmpeg`. |
-| ZIP을 다른 Mac에서 풀었는데 실행이 안 됨 | 그 PC에서 `npm install`과 `npm run setup`을 다시 실행합니다(`.venv`·`node_modules`는 PC마다 따로 만들어야 합니다). |
+| 모델을 나중에 받고 싶다 | `npm run lecture -- models` (더 가벼운 모델은 `--size small`) |
+| ZIP을 다른 Mac에서 풀었는데 실행이 안 됨 | 그 PC에서 `bash setup.sh`를 다시 실행합니다(`.venv`·`node_modules`·모델은 PC마다 따로 만들어야 합니다). |
 
 #### ZIP을 만들어 배포하는 사람에게
 
-`node_modules`, `.venv`는 용량이 크고 PC마다 달라서 ZIP에 넣지 않습니다. `.env`(비밀값)와 `.git`도 제외하세요. 프로젝트 폴더의 한 단계 위에서:
-
 ```bash
-zip -r lecture-inbox.zip lecture-inbox -x "*/node_modules/*" "*/.venv/*" "*/.git/*" "*/.env" "*/client/dist/*" "*__pycache__*" "*.DS_Store"
+npm run zip
 ```
+
+프로젝트 폴더 옆에 `lecture-inbox.zip`이 만들어집니다. 용량이 크거나 PC마다 다르거나 개인 자료인 것은 자동으로 뺍니다: `models/`, `output/`, `sources/`, `node_modules/`, `.venv/`, `.git/`, `.env`, `client/dist/`. 받는 사람은 위 "처음 한 번만: 설치"대로 하면 이 폴더들이 `bash setup.sh`로 만들어집니다.
 
 </details>
 
