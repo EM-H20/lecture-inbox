@@ -14,6 +14,89 @@ class UserError(Exception):
     pass
 
 
+class SchoolExpired(UserError):
+    pass
+
+
+class CourseParser(HTMLParser):
+    """Read the school's coursefullname links and their year/semester cells."""
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.courses = {}
+        self.cells = []
+        self.cell = None
+        self.link = None
+        self.links = []
+
+    def handle_starttag(self, tag, attributes):
+        attrs = dict(attributes)
+        if tag == "tr":
+            self.cells, self.links = [], []
+        elif tag == "td":
+            self.cell = ""
+        elif tag == "a" and "coursefullname" in attrs.get("class", "").split():
+            parsed = urlsplit(attrs.get("href", ""))
+            identifiers = parse_qs(parsed.query).get("id", [])
+            if (parsed.path == "/course/view.php" and parsed.netloc in ("", "ecampus.sejong.ac.kr")
+                    and len(identifiers) == 1 and re.fullmatch(r"[0-9]{1,12}", identifiers[0])):
+                self.link = {"id": identifiers[0], "name": ""}
+
+    def handle_data(self, data):
+        if self.cell is not None:
+            self.cell += data
+        if self.link is not None:
+            self.link["name"] += data
+
+    def handle_endtag(self, tag):
+        if tag == "td" and self.cell is not None:
+            self.cells.append(" ".join(self.cell.split()))
+            self.cell = None
+        elif tag == "a" and self.link is not None:
+            self.link["name"] = " ".join(self.link["name"].split())
+            self.links.append(self.link)
+            self.link = None
+        elif tag == "tr" and len(self.cells) >= 2:
+            for link in self.links:
+                if link["name"]:
+                    self.courses.setdefault(link["id"], dict(link, year=self.cells[0], semester=self.cells[1]))
+
+
+class LectureParser(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.lectures = {}
+        self.identifier = None
+        self.title = ""
+        self.spans = []
+
+    def handle_starttag(self, tag, attributes):
+        attrs = dict(attributes)
+        classes = attrs.get("class", "").split()
+        if tag == "li" and {"activity", "vod"}.issubset(classes):
+            match = re.fullmatch(r"module-([0-9]{1,12})", attrs.get("id", ""))
+            self.identifier = match[1] if match else None
+            self.title, self.spans = "", []
+        elif tag == "span" and self.identifier:
+            self.spans.append(classes)
+
+    def handle_data(self, data):
+        if (any("instancename" in classes for classes in self.spans)
+                and not any("accesshide" in classes for classes in self.spans)):
+            self.title += data
+
+    def handle_endtag(self, tag):
+        if tag == "span" and self.spans:
+            self.spans.pop()
+        elif tag == "li" and self.identifier:
+            title = " ".join(self.title.split())
+            if title:
+                self.lectures.setdefault(self.identifier, {
+                    "id": self.identifier, "title": title,
+                    "url": SCHOOL + "/mod/vod/viewer.php?id=" + self.identifier,
+                })
+            self.identifier, self.spans = None, []
+
+
 def lecture_id(url: str) -> str:
     parsed = urlsplit(url)
     values = parse_qs(parsed.query).get("id", [])
@@ -110,8 +193,24 @@ class SchoolSession:
         if urlsplit(url).path in {"/login/index.php", "/login.php"} or "logout.php" not in html:
             raise UserError("학교 로그인이 확인되지 않았습니다. 학번·비밀번호를 확인하거나 학교 사이트에서 직접 로그인해 주세요.")
 
+    def authenticated_page(self, path: str, require_logout=False):
+        url, html = self.page(path)
+        if (urlsplit(url).path in {"/login/index.php", "/login.php"}
+                or (require_logout and "logout.php" not in html)):
+            raise SchoolExpired("학교 로그인이 만료되었습니다. 다시 로그인한 뒤 재시도해 주세요.")
+        return html
+
+    def courses(self, year="all", semester="all"):
+        html = self.authenticated_page("/local/ubion/user/index.php?" + urlencode({"year": year, "semester": semester}), require_logout=True)
+        parser = CourseParser()
+        parser.feed(html)
+        return list(parser.courses.values())
+
+    def lectures(self, identifier: str):
+        html = self.authenticated_page("/course/view.php?" + urlencode({"id": identifier}))
+        parser = LectureParser()
+        parser.feed(html)
+        return list(parser.lectures.values())
+
     def stream(self, identifier: str):
-        url, html = self.page("/mod/vod/viewer.php?" + urlencode({"id": identifier}))
-        if urlsplit(url).path in {"/login/index.php", "/login.php"}:
-            raise UserError("학교 로그인이 만료되었습니다. 다시 로그인한 뒤 재시도해 주세요.")
-        return extract_stream(html)
+        return extract_stream(self.authenticated_page("/mod/vod/viewer.php?" + urlencode({"id": identifier})))

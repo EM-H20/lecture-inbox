@@ -12,7 +12,19 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from server.app import DownloadResponse, Job, Session, Store, create_app, validate_cdn
-from server.school import UserError, extract_stream, lecture_id, safe_name
+from server.school import SchoolExpired, UserError, extract_stream, lecture_id, safe_name
+
+# Synthetic HTML matching the selectors in the upstream course.py and its tests.
+COURSES_HTML = '''<a href="/login/logout.php">로그아웃</a><table>
+<tr><td>2026</td><td>2학기</td><td><span>교과</span>
+<a class="coursefullname" href="https://ecampus.sejong.ac.kr/course/view.php?id=42">자료 &amp; <b>구조</b></a></td></tr>
+<tr><td>2026</td><td>2학기</td><td><a class="coursefullname" href="/course/view.php?id=42">중복</a></td></tr>
+<tr><td>2026</td><td>2학기</td><td><a class="coursefullname" href="https://evil.example/course/view.php?id=99">외부</a></td></tr>
+</table>'''
+LECTURES_HTML = '''<ul><li class="activity vod modtype_vod" id="module-123">
+<a><span class="instancename">1주차 <b>소개</b><span class="accesshide"> 동영상</span></span></a></li>
+<li class="activity label" id="module-456"><span class="instancename">공지</span></li>
+<li class="activity vod" id="module-invalid"><span class="instancename">잘못된 ID</span></li></ul>'''
 
 
 class AppTests(unittest.TestCase):
@@ -147,6 +159,57 @@ class AppTests(unittest.TestCase):
         response = self.client.options('/api/login', headers={'Origin': 'http://localhost:4317', 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'authorization,content-type'})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers['access-control-allow-origin'], 'http://localhost:4317')
+
+    def test_catalog_parsing_and_selected_lecture_download(self):
+        token, headers = self.login()
+        school = self.store.sessions[token].school
+        with patch.object(school, 'page', return_value=('https://ecampus.sejong.ac.kr/local/ubion/user/index.php', COURSES_HTML)) as page:
+            result = self.client.get('/api/courses?year=2026&semester=20', headers=headers)
+            self.assertEqual(result.json(), {'courses': [{'id': '42', 'name': '자료 & 구조', 'year': '2026', 'semester': '2학기'}]})
+            page.assert_called_once_with('/local/ubion/user/index.php?year=2026&semester=20')
+        with patch.object(school, 'page', return_value=('https://ecampus.sejong.ac.kr/course/view.php?id=42', LECTURES_HTML)) as page:
+            result = self.client.get('/api/courses/42/lectures', headers=headers)
+            lectures = result.json()['lectures']
+            self.assertEqual(lectures, [{'id': '123', 'title': '1주차 소개', 'url': 'https://ecampus.sejong.ac.kr/mod/vod/viewer.php?id=123'}])
+            page.assert_called_once_with('/course/view.php?id=42')
+        with patch.object(self.store.executor, 'submit'):
+            result = self.client.post('/api/jobs', headers=headers, json={'url': lectures[0]['url'], 'name': lectures[0]['title']})
+        self.assertEqual(result.status_code, 202)
+        self.assertEqual(self.store.jobs[result.json()['id']].lecture_id, '123')
+
+    def test_catalog_uses_each_users_session_and_validates_filters(self):
+        token_a, headers_a = self.login()
+        token_b, headers_b = self.login('87654321')
+        for path in ('/api/courses', '/api/courses/42/lectures'):
+            self.assertEqual(self.client.get(path).status_code, 401)
+        with patch.object(self.store.sessions[token_a].school, 'courses', return_value=[{'id': '42'}]), patch.object(self.store.sessions[token_b].school, 'courses', return_value=[]):
+            self.assertEqual(self.client.get('/api/courses', headers=headers_a).json()['courses'], [{'id': '42'}])
+            self.assertEqual(self.client.get('/api/courses', headers=headers_b).json()['courses'], [])
+        with patch.object(self.store.sessions[token_b].school, 'lectures', side_effect=UserError('학교 사이트가 HTTP 403 오류를 반환했습니다.')):
+            self.assertEqual(self.client.get('/api/courses/42/lectures', headers=headers_b).status_code, 502)
+        for path in ('/api/courses?year=abc', '/api/courses?semester=30', '/api/courses/not-an-id/lectures'):
+            self.assertEqual(self.client.get(path, headers=headers_a).status_code, 422)
+
+    def test_catalog_expiry_errors_and_late_logout_response(self):
+        token, headers = self.login()
+        school = self.store.sessions[token].school
+        job = self.ready_job(token)
+        with patch.object(school, 'page', return_value=('https://ecampus.sejong.ac.kr/local/ubion/user/index.php', '<table></table>')):
+            response = self.client.get('/api/courses', headers=headers)
+            self.assertEqual(response.status_code, 409)
+            self.assertIn('만료', response.json()['detail'])
+            self.assertIn(job.id, self.store.jobs)
+        for login_path in ('/login.php', '/login/index.php'):
+            with patch.object(school, 'page', return_value=('https://ecampus.sejong.ac.kr' + login_path, '')):
+                with self.assertRaises(SchoolExpired):
+                    school.lectures('42')
+        with patch.object(school, 'page', return_value=('https://ecampus.sejong.ac.kr/local/ubion/user/index.php', '<a href="logout.php">나가기</a>')):
+            self.assertEqual(school.courses(), [])
+        def late_result(*args):
+            self.store.logout(token)
+            return [{'id': '42'}]
+        with patch.object(school, 'courses', side_effect=late_result):
+            self.assertEqual(self.client.get('/api/courses', headers=headers).status_code, 401)
 
     def test_player_parser_preserves_escaped_urls_and_rejects_local_urls(self):
         url = 'https://cdn.example.com/token/index.m3u8'

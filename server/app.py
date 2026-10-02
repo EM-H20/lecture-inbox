@@ -5,6 +5,7 @@ import asyncio
 import fcntl
 import hashlib
 import ipaddress
+import logging
 import os
 import secrets
 import shutil
@@ -19,13 +20,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import FastAPI, Header, HTTPException, Path as PathParam, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field, SecretStr
 
-from .school import SchoolSession, UserError, lecture_id, safe_name
+from .school import SchoolExpired, SchoolSession, UserError, lecture_id, safe_name
+
+# uvicorn configures this logger (INFO, stderr), so messages show in the dev terminal.
+log = logging.getLogger("uvicorn.error")
 
 
 @dataclass
@@ -154,6 +158,7 @@ class Store:
             job = Job(session.owner, identifier, safe_name(name or "강의-" + identifier) + ".mp4")
             self.jobs[job.id] = job
             self.executor.submit(self.download, job, session.school)
+            log.info("job %s queued (lecture %s)", job.id[:8], identifier)
             return job.public()
 
     def run_ffmpeg(self, job, stream, path, referer=False):
@@ -196,6 +201,7 @@ class Store:
             partial = folder / "video.part"
             result = self.run_ffmpeg(job, stream, partial)
             if result == "403":
+                log.info("job %s: ffmpeg got 403, retrying with referer", job.id[:8])
                 result = self.run_ffmpeg(job, stream, partial, referer=True)
             if result != "ok":
                 raise UserError("영상 다운로드에 실패했습니다. 학교에서 재생 가능한 강의인지 확인해 주세요.")
@@ -206,7 +212,12 @@ class Store:
                 job.size = (folder / "video.mp4").stat().st_size
                 job.status = "ready"
                 job.expires = time.time() + self.file_ttl
+            log.info("job %s ready (%.1f MB)", job.id[:8], job.size / 1024**2)
         except Exception as error:
+            if isinstance(error, UserError):
+                log.warning("job %s failed: %s", job.id[:8], error)
+            else:
+                log.exception("job %s crashed", job.id[:8])
             with self.lock:
                 job.status = "failed"
                 job.error = str(error) if isinstance(error, UserError) else "영상 준비 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
@@ -238,6 +249,7 @@ class Store:
             if not job or not logged_in or job.cancelled.is_set() or job.status != "ready" or job.expires <= time.time():
                 raise HTTPException(410, "파일 또는 로그인이 만료됐습니다.")
             job.transfers += 1
+            log.info("job %s download started", job.id[:8])
             return job
 
     def close(self):
@@ -345,10 +357,12 @@ def create_app(store=None):
         try:
             school.login(body.studentId, body.password.get_secret_value())
         except UserError as error:
+            log.warning("login failed: %s", error)
             raise HTTPException(401, str(error)) from None
         token = secrets.token_urlsafe(32)
         with state.lock:
             state.sessions[token] = Session(school, time.time() + state.session_ttl)
+        log.info("login ok (active sessions: %d)", len(state.sessions))
         return {"token": token, "expiresAt": state.sessions[token].expires}
 
     @app.post("/api/logout")
@@ -357,6 +371,31 @@ def create_app(store=None):
         token, _ = state.authenticate(authorization)
         state.logout(token)
         return {"ok": True}
+
+    def school_list(request, authorization, method, *args):
+        state = request.app.state.store
+        _, session = state.authenticate(authorization)
+        try:
+            result = getattr(session.school, method)(*args)
+        except SchoolExpired as error:
+            # Keep prepared files available; let the user explicitly log out/reconnect.
+            raise HTTPException(409, str(error)) from None
+        except UserError as error:
+            raise HTTPException(502, str(error)) from None
+        # A school response must not restore access after logout or local expiry.
+        state.authenticate(authorization)
+        return result
+
+    @app.get("/api/courses")
+    def courses(request: Request, authorization: str | None = Header(default=None),
+                year: str = Query(default="all", pattern=r"^(all|[0-9]{4})$"),
+                semester: str = Query(default="all", pattern=r"^(all|10|11|20|21)$")):
+        return {"courses": school_list(request, authorization, "courses", year, semester)}
+
+    @app.get("/api/courses/{course_id}/lectures")
+    def lectures(request: Request, course_id: str = PathParam(pattern=r"^[0-9]{1,12}$"),
+                 authorization: str | None = Header(default=None)):
+        return {"lectures": school_list(request, authorization, "lectures", course_id)}
 
     @app.get("/api/jobs")
     def jobs(request: Request, authorization: str | None = Header(default=None)):
