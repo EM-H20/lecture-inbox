@@ -23,10 +23,10 @@ class WorkOrderTests(unittest.TestCase):
             (folder / f"p{i:03d}.txt").write_text(text, encoding="utf-8")
 
     def lecture(self, stem, note=False):
-        self.out.mkdir(parents=True, exist_ok=True)
-        (self.out / f"{stem}.md").write_text("[00:00:01] x\n", encoding="utf-8")
+        (self.src / "전사").mkdir(parents=True, exist_ok=True)
+        (self.src / "전사" / f"{stem}.md").write_text("[00:00:01] x\n", encoding="utf-8")
         if note:
-            (self.out / "notes").mkdir(exist_ok=True)
+            (self.out / "notes").mkdir(parents=True, exist_ok=True)
             (self.out / "notes" / f"{stem}.md").write_text("n", encoding="utf-8")
 
     def text(self):
@@ -57,7 +57,7 @@ class WorkOrderTests(unittest.TestCase):
         self.assertIn("sources/자료구조/pages/pNNN.png", text)
         self.assertLess(text.index("| week_01_01 "), text.index("| week_01_02 "))
         self.assertEqual(self.row(text, "week_01_01"),
-                         "| week_01_01 | `output/자료구조/week_01_01.md` | `output/자료구조/notes/week_01_01.md` | 정리 완료 |")
+                         "| week_01_01 | `sources/자료구조/전사/week_01_01.md` | `output/자료구조/notes/week_01_01.md` | 정리 완료 |")
         self.assertTrue(self.row(text, "week_01_02").endswith("| 정리 대기 |"))
         self.assertIn("정리 대기: 1개", text)
 
@@ -67,9 +67,9 @@ class WorkOrderTests(unittest.TestCase):
 
     def test_ignores_staging_and_misnamed_files(self):
         self.lecture("week_01_01")
-        (self.out / ".staging-x").mkdir()
-        (self.out / ".staging-x" / "week_09_09.md").write_text("x", encoding="utf-8")
-        (self.out / "week_1_1.md").write_text("x", encoding="utf-8")
+        (self.src / "전사" / ".staging-x").mkdir()
+        (self.src / "전사" / ".staging-x" / "week_09_09.md").write_text("x", encoding="utf-8")
+        (self.src / "전사" / "week_1_1.md").write_text("x", encoding="utf-8")
         text = self.text()
         self.assertNotIn("week_09_09", text)
         self.assertNotIn("week_1_1", text)

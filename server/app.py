@@ -1,4 +1,4 @@
-"""OCI API: per-user school sessions, bounded temporary downloads, browser delivery."""
+"""Local API: per-user school sessions, bounded temporary downloads, browser delivery, and the /api/local lecture routes."""
 from __future__ import annotations
 
 import asyncio
@@ -27,6 +27,10 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field, SecretStr
 
 from .school import SchoolExpired, SchoolSession, UserError, lecture_id, safe_name
+from server.lecture.cli import PROJECT_ROOT
+from server.lecture.transcriber import Transcriber
+from server.lecture.web import create_router
+from server.lecture.whisper import WhisperCli
 
 # uvicorn configures this logger (INFO, stderr), so messages show in the dev terminal.
 log = logging.getLogger("uvicorn.error")
@@ -286,7 +290,9 @@ class JobBody(BaseModel):
     name: str = Field(default="", max_length=150)
 
 
-def create_app(store=None):
+def create_app(store=None, transcriber=None):
+    transcriber = transcriber or Transcriber(Path(os.getenv("LECTURE_ROOT") or PROJECT_ROOT), WhisperCli.from_env)
+
     @asynccontextmanager
     async def lifespan(app):
         owned_temp = None
@@ -297,6 +303,7 @@ def create_app(store=None):
             lock_file = (parent / "service.lock").open("a")
             # ponytail: one API process; shared session/job storage is needed before scaling replicas.
             fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            transcriber.discard_stale_uploads()  # only the instance that holds the lock may wipe leftovers
             for stale in parent.glob("run-*"):
                 if stale.is_dir():
                     shutil.rmtree(stale)
@@ -312,6 +319,7 @@ def create_app(store=None):
         try:
             yield
         finally:
+            await asyncio.to_thread(transcriber.close)  # stop Whisper first so shutdown is quick
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
             await asyncio.to_thread(app.state.store.close)
@@ -321,9 +329,12 @@ def create_app(store=None):
                 lock_file.close()
 
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None)
+    app.state.transcriber = transcriber
+    app.include_router(create_router())
     origins = os.getenv("FRONTEND_ORIGINS", "http://localhost:4317,http://127.0.0.1:4317").split(",")
     app.add_middleware(CORSMiddleware, allow_origins=[o.strip() for o in origins],
-                       allow_methods=["GET", "POST", "DELETE"], allow_headers=["Authorization", "Content-Type"])
+                       allow_methods=["GET", "POST", "PUT", "DELETE"],
+                       allow_headers=["Authorization", "Content-Type", "X-Requested-With", "X-Filename"])
 
     @app.middleware("http")
     async def security_headers(request, call_next):

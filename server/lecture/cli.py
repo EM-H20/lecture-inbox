@@ -4,7 +4,7 @@ import logging
 import sys
 from pathlib import Path
 
-from server.lecture.layout import LayoutError
+from server.lecture.layout import LayoutError, output_dir
 from server.lecture.models import download_models
 from server.lecture.pipeline import prepare_course, transcribe_lecture
 from server.lecture.whisper import MODEL_SIZES, WhisperCli
@@ -43,7 +43,8 @@ def main(argv=None, root: Path = PROJECT_ROOT, engine_factory=WhisperCli.from_en
             for path in paths:
                 print(f"  {path.relative_to(root).as_posix()}")
             print("\n".join(notes))
-            print(f'\n이제 에이전트에게 말하세요: "output/{paths[0].parent.name}/정리-작업.md대로 정리해줘"')
+            folder = output_dir(root, args.course).relative_to(root).as_posix()
+            print(f'\n이제 에이전트에게 말하세요: "{folder}/정리-작업.md대로 정리해줘"')
         return 0
     except (LayoutError, FileNotFoundError, RuntimeError) as error:
         print(f"오류: {error}", file=sys.stderr)

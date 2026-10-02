@@ -9,6 +9,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import threading
 from pathlib import Path
 
 from server.lecture.audio import extract_wav_span, wav_duration_seconds
@@ -22,11 +23,21 @@ VAD_MODEL_FILE = "ggml-silero-v6.2.0.bin"
 MAX_RETRY_SPAN_SECONDS = 180.0
 REPETITION_PLACEHOLDER = "[⚠️ 반복 감지 - 확인 필요] "
 RETRY_PERTURBATIONS = ([], ["-et", "2.6", "-tp", "0.5"])
+CANCELLED = "전사가 취소되었습니다."
 
 
 class WhisperCli:
-    def __init__(self, binary: str, model_path: str, vad_model_path: str, run=subprocess.run):
-        self.binary, self.model_path, self.vad_model_path, self.run = binary, model_path, vad_model_path, run
+    def __init__(self, binary: str, model_path: str, vad_model_path: str, popen=subprocess.Popen):
+        self.binary, self.model_path, self.vad_model_path, self.popen = binary, model_path, vad_model_path, popen
+        self._stopped = threading.Event()
+        self._process = None
+
+    def stop(self) -> None:
+        """Ask a running (or about to run) transcription to end; later _run calls refuse to start."""
+        self._stopped.set()
+        process = self._process
+        if process is not None:
+            process.terminate()
 
     @classmethod
     def from_env(cls, root: Path) -> "WhisperCli":
@@ -57,9 +68,20 @@ class WhisperCli:
             prefix = Path(tmp) / "result"
             args = [self.binary, "--vad", "--vad-model", self.vad_model_path, "-m", self.model_path,
                     "-oj", "-of", str(prefix), "-f", str(wav), *extra_args]
-            result = self.run(args, capture_output=True)
-            if result.returncode != 0:
-                raise RuntimeError(f"whisper-cli exited {result.returncode}: {result.stderr.decode(errors='replace')[-500:]}")
+            if self._stopped.is_set():
+                raise RuntimeError(CANCELLED)
+            process = self.popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+            self._process = process
+            try:
+                if self._stopped.is_set():  # stop() raced with the launch
+                    process.terminate()
+                _, stderr = process.communicate()
+            finally:
+                self._process = None
+            if self._stopped.is_set():
+                raise RuntimeError(CANCELLED)
+            if process.returncode != 0:
+                raise RuntimeError(f"whisper-cli exited {process.returncode}: {(stderr or b'').decode(errors='replace')[-500:]}")
             # whisper.cpp can split one Hangul character across segments and emit invalid UTF-8
             # (upstream ggml-org/whisper.cpp#1798): decode leniently instead of failing the whole run.
             return json.loads((prefix.parent / "result.json").read_bytes().decode("utf-8", errors="replace"))
@@ -93,6 +115,8 @@ class WhisperCli:
             try:
                 raw = self._run(clip, ["-mc", "0", *extra, "-l", language])
             except Exception:  # a failed retry must not sink an otherwise good transcription
+                if self._stopped.is_set():
+                    raise  # ...but a cancelled run must end here instead of falling through to a placeholder
                 log.warning("반복 구간 재디코딩 실패 (%.0f–%.0f초)", first.start, last.end, exc_info=True)
                 continue
             retried = self._segments(raw, offset)

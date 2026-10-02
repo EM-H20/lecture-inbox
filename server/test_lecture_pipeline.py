@@ -3,6 +3,7 @@ import io
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from server.lecture.cli import main
 from server.lecture.layout import TranscriptExists
@@ -68,6 +69,7 @@ class PipelineTests(unittest.TestCase):
             self.run_pipeline(FakeEngine(error=RuntimeError("boom")))
         self.assertFalse(self.wav.exists())
         self.assertFalse((self.root / "output").exists())
+        self.assertFalse((self.root / "sources").exists())
 
     def test_silent_audio_writes_nothing(self):
         with self.assertRaises(RuntimeError) as caught:
@@ -75,6 +77,7 @@ class PipelineTests(unittest.TestCase):
         self.assertIn("음성", str(caught.exception))
         self.assertFalse(self.wav.exists())
         self.assertFalse((self.root / "output").exists())
+        self.assertFalse((self.root / "sources").exists())
 
     def test_bad_pdf_does_not_block_the_transcript(self):
         sources = self.root / "sources" / "강의"
@@ -88,6 +91,23 @@ class PipelineTests(unittest.TestCase):
         self.source.unlink()
         with self.assertRaises(FileNotFoundError):
             self.run_pipeline(FakeEngine())
+
+    def test_reports_each_stage_in_order(self):
+        stages = []
+        self.run_pipeline(FakeEngine(), on_stage=stages.append)
+        self.assertEqual(stages, ["converting", "transcribing", "saving"])
+
+    def test_a_raising_stage_callback_aborts_and_removes_the_wav(self):
+        def refuse(stage):
+            if stage == "transcribing":
+                raise RuntimeError("취소됨")
+
+        engine = FakeEngine()
+        with self.assertRaises(RuntimeError):
+            self.run_pipeline(engine, on_stage=refuse)
+        self.assertEqual(engine.calls, 0)
+        self.assertFalse(self.wav.exists())
+        self.assertFalse((self.root / "sources").exists())
 
 
 class CliTests(unittest.TestCase):
@@ -123,3 +143,14 @@ class CliTests(unittest.TestCase):
                                  engine_factory=lambda root: FakeEngine())
         self.assertEqual(code, 1)
         self.assertIn("주차", err)
+
+    def test_transcribe_points_the_user_at_the_work_order(self):
+        source = self.root / "lec.mp4"
+        source.write_bytes(b"video")
+        paths = [self.root / "sources" / "강의" / "전사" / "week_01_01.md"]
+        with patch("server.lecture.cli.transcribe_lecture", return_value=(paths, ["교안 없음"])):
+            code, out, _ = self.call(["transcribe", str(source), "--course", "강의", "--week", "1", "--session", "1"],
+                                     engine_factory=lambda root: FakeEngine())
+        self.assertEqual(code, 0)
+        self.assertIn("sources/강의/전사/week_01_01.md", out)
+        self.assertIn("output/강의/정리-작업.md대로", out)

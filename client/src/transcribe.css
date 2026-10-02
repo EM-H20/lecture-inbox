@@ -1,0 +1,43 @@
+[hidden] { display: none !important; }
+.tabs { display: flex; gap: 8px; margin: 0 0 24px; border-bottom: 1px solid var(--color-smoke); }
+.tab { border: 0; border-bottom: 2px solid transparent; background: none; color: var(--color-muted); font-size: 15px; padding: 12px 20px; min-height: 48px; }
+.tab[aria-selected="true"] { color: var(--color-ink); border-bottom-color: var(--color-ink); }
+.tab:not([aria-selected="true"]):hover { color: var(--color-ink); background: none; }
+.local-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; }
+.course-picker select { font-size: 15px; }
+.course-create { margin-top: 16px; padding: 16px; border: 1px dashed var(--color-smoke); border-radius: var(--radius-input); }
+.course-create label:first-child { margin-top: 0; }
+.course-create-actions { display: flex; align-items: center; gap: 12px; }
+.course-picker code, .viewer-path code, .local-grid .muted code, .files-note code { font-size: 12px; background: var(--color-canvas); padding: 2px 6px; border-radius: 4px; overflow-wrap: anywhere; }
+.pdf-state { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-top: 20px; padding: 16px; border: 1px solid var(--color-border); border-radius: var(--radius-input); font-size: 13px; }
+.pdf-state input[type="file"] { position: absolute; width: 1px; height: 1px; min-height: 0; margin: -1px; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); }
+.file-button { display: inline-flex; align-items: center; min-height: 44px; margin: 0; padding: 0 16px; border: 1px solid var(--color-smoke); border-radius: var(--radius-button); background: var(--color-surface); cursor: pointer; font-size: 13px; }
+.file-button { position: relative; }
+.file-button:hover { background: var(--color-canvas); }
+.file-button:focus-within, .dropzone:focus-within { outline: 2px solid var(--color-ink); outline-offset: 4px; }
+.file-button[aria-disabled="true"] { opacity: .5; pointer-events: none; }
+.week-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.check-line { display: flex; align-items: center; gap: 10px; font-size: 13px; margin: 16px 0 0; }
+.check-line input { display: inline-block; width: auto; min-height: 0; }
+.lecture-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+.badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--color-canvas); color: var(--color-muted); }
+.badge.on { background: #f7fad8; color: var(--color-ink); border: 1px solid #839000; }
+.dropzone { position: relative; margin-top: 20px; border: 1px dashed var(--color-muted); border-radius: var(--radius-input); background: var(--color-surface); text-align: center; }
+.dropzone.dragging { background: #f7fad8; border-color: var(--color-ink); }
+.dropzone input { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; padding: 0; opacity: 0; cursor: pointer; }
+.dropzone label { margin: 0; padding: 40px 16px; font-size: 14px; color: var(--color-muted); pointer-events: none; overflow-wrap: anywhere; }
+.dropzone.has-file label { color: var(--color-ink); }
+.progress { margin-top: 16px; font-size: 12px; color: var(--color-muted); }
+.progress-bar { height: 6px; margin-top: 6px; border-radius: 3px; background: var(--color-border); overflow: hidden; }
+.progress-bar i { display: block; height: 100%; background: var(--color-ink); transition: width .2s; }
+.status.done::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: var(--color-accent); border: 1px solid #839000; }
+.status.converting, .status.transcribing, .status.saving { color: var(--color-ink); }
+.status.cancelled, .status.waiting { color: var(--color-muted); }
+.job-list li { flex-wrap: wrap; }
+.school-transcribe { flex-basis: 100%; margin-top: 8px; padding: 16px; border: 1px solid var(--color-border); border-radius: var(--radius-input); background: var(--color-canvas); }
+.school-transcribe form { margin-top: 0; }
+.viewer { margin: 24px; padding: 20px; border: 1px solid var(--color-border); border-radius: var(--radius-input); background: var(--color-surface); }
+.viewer pre { margin: 12px 0 0; max-height: 360px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.8 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.viewer-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.banner-list .message { margin-bottom: 12px; }
+@media (max-width: 720px) { .week-grid { grid-template-columns: 1fr; } .tab { padding: 12px 12px; font-size: 14px; } }

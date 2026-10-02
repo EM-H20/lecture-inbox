@@ -32,6 +32,10 @@ def sources_dir(root: Path, course: str) -> Path:
     return root / "sources" / safe_course(course)
 
 
+def transcript_dir(root: Path, course: str) -> Path:
+    return sources_dir(root, course) / "전사"  # transcripts are agent input, so they live with the 교안
+
+
 def lecture_stem(week: int, session: int) -> str:
     for label, value in (("주차", week), ("차시", session)):
         if not 1 <= value <= 99:
@@ -40,7 +44,7 @@ def lecture_stem(week: int, session: int) -> str:
 
 
 def existing_transcripts(root: Path, course: str, week: int, session: int) -> list[Path]:
-    folder, stem = output_dir(root, course), lecture_stem(week, session)
+    folder, stem = transcript_dir(root, course), lecture_stem(week, session)
     return [folder / (stem + ext) for ext in EXTENSIONS if (folder / (stem + ext)).exists()]
 
 
@@ -55,7 +59,7 @@ def publish_transcript(root: Path, course: str, week: int, session: int, transcr
     """Write .md and .txt into a staging folder, then rename them into place."""
     if not overwrite:
         ensure_free(root, course, week, session)
-    folder, stem = output_dir(root, course), lecture_stem(week, session)
+    folder, stem = transcript_dir(root, course), lecture_stem(week, session)
     folder.mkdir(parents=True, exist_ok=True)
     texts = {".md": to_markdown(transcript), ".txt": to_plain_text(transcript)}
     staging = Path(tempfile.mkdtemp(prefix=".staging-", dir=folder))

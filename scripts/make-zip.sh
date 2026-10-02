@@ -9,6 +9,6 @@ cd "$(dirname "$root")"
 zip -rq "$out" "$name" -x \
   "$name/models/*" "$name/output/*" "$name/sources/*" \
   "$name/node_modules/*" "$name/client/node_modules/*" "$name/.venv/*" "$name/client/dist/*" \
-  "$name/.git/*" "$name/.env" "$name/.superpowers/*" "$name/.playwright-mcp/*" "$name/docs/superpowers/*" \
+  "$name/.git/*" "$name/.env" "$name/.uploads/*" "$name/.superpowers/*" "$name/.playwright-mcp/*" "$name/docs/superpowers/*" \
   "*__pycache__*" "*.DS_Store"
 echo "만들었습니다: $out ($(du -h "$out" | cut -f1))"

@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
+import Transcribe from './Transcribe.jsx';
+import SchoolTranscribe from './SchoolTranscribe.jsx';
 
 const API = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '');
 const LABELS = { waiting: '대기 중', downloading: '영상 준비 중', ready: '다운로드 가능', failed: '다시 확인해 주세요' };
@@ -105,6 +107,15 @@ function App() {
   const [notice, setNotice] = useState('');
   const [health, setHealth] = useState(null);
   const [refresh, setRefresh] = useState(0);
+  const [tab, setTab] = useState(() => {
+    try { return localStorage.getItem('lecture-tab') === 'local' ? 'local' : 'school'; } catch { return 'school'; }
+  });
+  const [transcribeJob, setTranscribeJob] = useState('');
+
+  function chooseTab(next) {
+    setTab(next);
+    try { localStorage.setItem('lecture-tab', next); } catch { /* remembering the tab is optional */ }
+  }
   const pending = useRef(false);
   const epoch = useRef(0);
 
@@ -239,7 +250,12 @@ function App() {
       {error || pollError ? <div className="message error" role="alert">{error || pollError}</div> : null}
       {notice ? <div className="message success" role="status">{notice}</div> : null}
       {health?.ok && !health.ffmpeg ? <div className="message error" role="alert">서버에 ffmpeg가 설치되어 있지 않습니다. 운영자 설정이 필요합니다.</div> : null}
-      <div className="workspace" id="workspace">
+      <div className="tabs" role="tablist" aria-label="작업 선택">
+        <button className="tab" role="tab" aria-selected={tab === 'school'} onClick={() => chooseTab('school')}>학교 강의 받기</button>
+        <button className="tab" role="tab" aria-selected={tab === 'local'} onClick={() => chooseTab('local')}>내 영상 전사</button>
+      </div>
+      <div hidden={tab !== 'local'}><Transcribe active={tab === 'local'} /></div>
+      <div className="workspace" id="workspace" hidden={tab !== 'school'}>
         <aside className="panel account">
           <div className="step"><span>01 / CONNECT</span><Icon name="folder" /></div>
           <h2>{token ? '연결되었습니다' : '학교 계정으로 시작'}</h2>
@@ -267,7 +283,9 @@ function App() {
           <section className="panel files"><div className="files-header"><div><span className="eyebrow">03 / KEEP</span><h2>내 다운로드 <span className="count">{jobs.length}</span></h2></div><Icon name="download" /></div>
             {jobs.length === 0 ? <div className="empty"><div className="empty-icon"><Icon name="folder" /></div><h3>아직 담긴 강의가 없어요</h3><p>위에서 강의를 선택하면 여기에 표시됩니다.</p></div> : <ul className="job-list">{jobs.map((job) => <li key={job.id}>
               <span className="file-icon"><Icon name="video" /></span><div className="file-details"><strong>{job.name}</strong><span className={`status ${job.status}`}>{LABELS[job.status]}{job.size > 0 ? ` · ${(job.size / 1024**2).toFixed(1)} MB` : ''}</span>{job.error ? <p className="job-error">{job.error}</p> : null}{job.status === 'ready' && job.expiresAt ? <small>{new Date(job.expiresAt * 1000).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}까지 받을 수 있어요</small> : null}</div>
-              <div className="job-actions">{job.status === 'ready' ? <button className="download-button" disabled={Boolean(busy)} onClick={() => download(job)}><Icon name="download" />다운로드</button> : null}<button className="text-button" disabled={Boolean(busy)} onClick={() => action('delete', async () => { await api(`/api/jobs/${job.id}`, { method: 'DELETE' }); setRefresh((n) => n + 1); })}>{job.status === 'waiting' || job.status === 'downloading' ? '취소' : '목록에서 정리'}</button></div>
+              <div className="job-actions">{job.status === 'ready' ? <button className="download-button" disabled={Boolean(busy)} onClick={() => download(job)}><Icon name="download" />다운로드</button> : null}<button className="text-button" disabled={Boolean(busy)} onClick={() => action('delete', async () => { await api(`/api/jobs/${job.id}`, { method: 'DELETE' }); setRefresh((n) => n + 1); })}>{job.status === 'waiting' || job.status === 'downloading' ? '취소' : '목록에서 정리'}</button>{job.status === 'ready' ? <button className="text-button" onClick={() => setTranscribeJob(transcribeJob === job.id ? '' : job.id)}>전사하기</button> : null}</div>
+              {transcribeJob === job.id ? <SchoolTranscribe token={token} job={job} onClose={() => setTranscribeJob('')}
+                onStarted={() => { setTranscribeJob(''); chooseTab('local'); }} /> : null}
             </li>)}</ul>}
             <div className="files-note">한 번에 한 강의씩 준비하고, 최대 3개까지 보관합니다. 파일은 브라우저의 다운로드 폴더에 저장됩니다. 서버의 임시 파일은 만료되거나 로그아웃하면 정리됩니다.</div>
           </section>

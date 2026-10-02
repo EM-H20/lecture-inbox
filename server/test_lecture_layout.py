@@ -30,14 +30,14 @@ class LayoutTests(unittest.TestCase):
 
     def test_publish_writes_markdown_and_plain_text(self):
         md, txt = self.publish()
-        self.assertEqual(md, self.root / "output" / "자료구조" / "week_01_02.md")
+        self.assertEqual(md, self.root / "sources" / "자료구조" / "전사" / "week_01_02.md")
         self.assertEqual(md.read_text(encoding="utf-8"), "[00:00:00] 안녕하세요\n")
         self.assertEqual(txt.read_text(encoding="utf-8"), "안녕하세요\n")
 
-    def test_course_name_cannot_escape_the_output_folder(self):
+    def test_course_name_cannot_escape_the_sources_folder(self):
         for name in ("../../evil", "/etc/passwd", "..", "a/../../b"):
             for path in self.publish(course=name):
-                self.assertEqual(path.parent.parent, self.root / "output", name)
+                self.assertEqual(path.parent.parent.parent, self.root / "sources", name)
 
     def test_blank_course_name_is_rejected(self):
         for name in ("", "   "):

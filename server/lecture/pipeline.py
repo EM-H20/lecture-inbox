@@ -23,17 +23,22 @@ def prepare_course(root: Path, course: str) -> list[str]:
 
 
 def transcribe_lecture(root: Path, course: str, week: int, session: int, source: Path, engine, *,
-                       force: bool = False, normalize=normalize_to_wav) -> tuple[list[Path], list[str]]:
+                       force: bool = False, normalize=normalize_to_wav,
+                       on_stage=None) -> tuple[list[Path], list[str]]:
+    stage = on_stage or (lambda name: None)
     if not source.is_file():
         raise FileNotFoundError(f"파일을 찾을 수 없습니다: {source}")
     if not force:
         ensure_free(root, course, week, session)  # refuse before spending hours on a transcript we would not save
+    stage("converting")
     wav = normalize(source)
     try:
+        stage("transcribing")
         transcript = engine.transcribe(wav, source.name)
     finally:
         wav.unlink(missing_ok=True)
     if not transcript.segments:
         raise RuntimeError("음성이 감지되지 않았습니다. 파일에 말소리가 있는지 확인해 주세요.")
+    stage("saving")
     paths = publish_transcript(root, course, week, session, transcript, overwrite=force)
     return paths, prepare_course(root, course)

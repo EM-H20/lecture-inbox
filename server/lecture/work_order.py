@@ -1,7 +1,7 @@
 """정리-작업.md: the per-course job list an agent reads. Rebuilt from the files on disk every time."""
 from pathlib import Path
 
-from server.lecture.layout import output_dir, sources_dir
+from server.lecture.layout import output_dir, sources_dir, transcript_dir
 from server.lecture.pdf import PDF_NAME
 
 GUIDE_NAME = "정리-지침.md"
@@ -27,7 +27,7 @@ def build_work_order(root: Path, course: str) -> str:
         lines.append(f"- 교안 없음: `{rel(src)}/{PDF_NAME}`를 넣고 `{prepare}`를 실행하면 페이지가 준비됩니다. 교안이 없으면 전사체만으로 정리하세요.")
 
     lines += ["", "## 회차", ""]
-    lectures = sorted(out.glob("week_[0-9][0-9]_[0-9][0-9].md"))
+    lectures = sorted(transcript_dir(root, course).glob("week_[0-9][0-9]_[0-9][0-9].md"))
     if not lectures:
         lines.append("아직 전사체가 없습니다.")
     else:

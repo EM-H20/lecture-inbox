@@ -14,3 +14,4 @@ docs/superpowers/
 .playwright-mcp/
 output/
 sources/
+.uploads/
