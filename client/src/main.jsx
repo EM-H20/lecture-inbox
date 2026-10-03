@@ -236,28 +236,38 @@ function App() {
 
   const preparing = jobs.some((j) => j.status === 'waiting' || j.status === 'downloading');
   return <div className="shell">
-    <a className="skip-link" href="#workspace">본문으로 건너뛰기</a>
-    <header className="topbar">
-      <a className="brand" href="/" aria-label="강의 서랍 홈"><span className="brand-icon"><Icon /></span>강의 서랍<span className="brand-tag">LECTURE INBOX</span></a>
-      <span className="connection"><i className={health?.ok ? 'online' : ''} />{health === null ? '서버 연결 중' : health.ok ? '서버 연결됨' : '서버 연결 확인 필요'}</span>
-    </header>
+    <a className="skip-link" href={tab === 'local' ? '#local-workspace' : '#workspace'}>본문으로 건너뛰기</a>
+    <aside className="app-rail">
+      <a className="brand" href="/" aria-label="강의 서랍 홈"><span className="brand-icon"><Icon /></span><span>강의 서랍<small>나만의 학습 공간</small></span></a>
+      <div className="rail-label">WORKSPACE</div>
+      <div className="tabs" role="tablist" aria-label="작업 선택" aria-orientation="vertical"
+        onKeyDown={(event) => {
+          if (!['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+          event.preventDefault();
+          const next = event.key === 'Home' ? 'school' : event.key === 'End' ? 'local' : tab === 'school' ? 'local' : 'school';
+          chooseTab(next);
+          event.currentTarget.querySelector(`#tab-${next}`).focus();
+        }}>
+        <button id="tab-school" className="tab" role="tab" aria-label="학교 강의 받기" aria-controls="workspace" tabIndex={tab === 'school' ? 0 : -1} aria-selected={tab === 'school'} onClick={() => chooseTab('school')}><Icon name="download" /><span>학교 강의 받기<small>집현캠퍼스에서 가져오기</small></span></button>
+        <button id="tab-local" className="tab" role="tab" aria-label="전사·시험 정리" aria-controls="local-workspace" tabIndex={tab === 'local' ? 0 : -1} aria-selected={tab === 'local'} onClick={() => chooseTab('local')}><Icon name="folder" /><span>전사·시험 정리<small>내 자료로 공부하기</small></span></button>
+      </div>
+      <div className="rail-note"><span>강의는 차곡차곡.<br />공부는 나의 속도로.</span><p>영상에서 놓친 설명을 찾고,<br />필요한 회차만 노트로 남기세요.</p></div>
+      <div className="rail-bottom"><span className="connection"><i className={health?.ok ? 'online' : ''} />{health === null ? '서버 연결 중' : health.ok ? '서버 연결됨' : '서버 연결 확인 필요'}</span><small>자료는 이 컴퓨터에 보관됩니다.</small></div>
+    </aside>
     <main>
-      <section className="intro">
-        <div><span className="eyebrow">A LITTLE SPACE FOR YOUR LEARNING</span><h1>오늘의 강의를,<br /><span>내일의 나에게.</span></h1><p>필요한 강의를 담아 두세요.<br />나의 속도로, 언제든 다시 꺼내 볼 수 있도록.</p></div>
-        <div className="intro-note"><span className="note-index">01 — 03</span><span>학교에서 내 컴퓨터까지</span><p>로그인하고, 강의를 선택하고,<br />MP4 파일로 간직하세요.</p><a href="#workspace">강의 담으러 가기 <Icon name="arrow" /></a></div>
-      </section>
-      <ol className="workflow" aria-label="강의 다운로드 순서"><li><span>01</span> 학교 계정 연결</li><li><span>02</span> 과목에서 강의 선택</li><li><span>03</span> 내 컴퓨터에 저장</li></ol>
+      <header className="page-heading">
+        <p className="breadcrumb">내 학습 공간 <span>/</span> {tab === 'local' ? '전사·시험 정리' : '학교 강의 받기'}</p>
+        <div className="page-title"><div><h1>{tab === 'local' ? '배운 내용을, 나의 것으로.' : '공부의 시작, 강의 모으기.'}</h1><p>{tab === 'local' ? '교안과 강의 속 설명을 연결해, 나만의 시험 대비 노트를 만드세요.' : '집현캠퍼스의 강의를 가져와 원하는 시간에 다시 살펴보세요.'}</p></div>
+          <span className="page-context">{tab === 'local' ? '학교 로그인 없이 이용 가능' : '세종대학교 집현캠퍼스'}</span></div>
+      </header>
+      <ol className="workflow" aria-label={tab === 'local' ? '시험 준비 순서' : '강의 다운로드 순서'}><li><span>01</span>{tab === 'local' ? '과목 고르기' : '학교 계정 연결'}</li><li><span>02</span>{tab === 'local' ? '자료 준비하기' : '필요한 강의 선택'}</li><li><span>03</span>{tab === 'local' ? '선택한 회차 정리하기' : '다운로드 후 전사하기'}</li></ol>
       {error || pollError ? <div className="message error" role="alert">{error || pollError}</div> : null}
       {notice ? <div className="message success" role="status">{notice}</div> : null}
       {health?.ok && !health.ffmpeg ? <div className="message error" role="alert">서버에 ffmpeg가 설치되어 있지 않습니다. 운영자 설정이 필요합니다.</div> : null}
-      <div className="tabs" role="tablist" aria-label="작업 선택">
-        <button className="tab" role="tab" aria-selected={tab === 'school'} onClick={() => chooseTab('school')}>학교 강의 받기</button>
-        <button className="tab" role="tab" aria-selected={tab === 'local'} onClick={() => chooseTab('local')}>내 영상 전사</button>
-      </div>
-      <div hidden={tab !== 'local'}><Transcribe active={tab === 'local'} /></div>
-      <div className="workspace" id="workspace" hidden={tab !== 'school'}>
+      <div id="local-workspace" role="tabpanel" aria-labelledby="tab-local" hidden={tab !== 'local'}><Transcribe active={tab === 'local'} /></div>
+      <div className="workspace" id="workspace" role="tabpanel" aria-labelledby="tab-school" hidden={tab !== 'school'}>
         <aside className="panel account">
-          <div className="step"><span>01 / CONNECT</span><Icon name="folder" /></div>
+          <div className="step"><span>01 · 학교 연결</span><Icon name="folder" /></div>
           <h2>{token ? '연결되었습니다' : '학교 계정으로 시작'}</h2>
           <p className="muted">세종대학교 집현캠퍼스 계정을 사용합니다.</p>
           {token ? <div className="connected-card"><div className="check">✓</div><strong>강의를 가져올 준비가 됐어요</strong><p>본인 계정으로 접근할 수 있는 강의만 받을 수 있습니다.</p><button className="secondary" disabled={Boolean(busy)} onClick={() => action('logout', async () => { await api('/api/logout', { method: 'POST', body: '{}' }); forget(); })}>로그아웃</button></div> :
@@ -269,7 +279,7 @@ function App() {
           <div className="privacy"><span>개인정보 안내</span><p>로그인을 위해 학번과 비밀번호를 이 서비스의 서버를 통해 학교에 전달합니다. 비밀번호는 저장하지 않으며, 학교 세션은 만료 또는 로그아웃 시 삭제합니다.</p></div>
         </aside>
         <div className="main-column">
-          <section className="panel download-form"><div className="step"><span>02 / COLLECT</span><Icon name="video" /></div><h2>어떤 강의를 보관할까요?</h2>
+          <section className="panel download-form"><div className="step"><span>02 · 강의 선택</span><Icon name="video" /></div><h2>어떤 강의를 보관할까요?</h2>
             {token ? <CourseBrowser key={token} api={api} token={token} disabled={Boolean(busy) || preparing || !health?.ffmpeg} onPrepare={prepare} onExpired={() => { forget(); setError('로그인이 만료되었습니다. 다시 로그인해 주세요.'); }} /> : <p className="hint">로그인하면 수강 과목과 강의 목록을 불러옵니다.</p>}
             <details className="manual-url"><summary>강의 주소로 직접 추가</summary>
             <form onSubmit={submit}>
@@ -280,7 +290,7 @@ function App() {
             </form>
             </details>
           </section>
-          <section className="panel files"><div className="files-header"><div><span className="eyebrow">03 / KEEP</span><h2>내 다운로드 <span className="count">{jobs.length}</span></h2></div><Icon name="download" /></div>
+          <section className="panel files"><div className="files-header"><div><span className="eyebrow">03 · 내 다운로드</span><h2>내 다운로드 <span className="count">{jobs.length}</span></h2></div><Icon name="download" /></div>
             {jobs.length === 0 ? <div className="empty"><div className="empty-icon"><Icon name="folder" /></div><h3>아직 담긴 강의가 없어요</h3><p>위에서 강의를 선택하면 여기에 표시됩니다.</p></div> : <ul className="job-list">{jobs.map((job) => <li key={job.id}>
               <span className="file-icon"><Icon name="video" /></span><div className="file-details"><strong>{job.name}</strong><span className={`status ${job.status}`}>{LABELS[job.status]}{job.size > 0 ? ` · ${(job.size / 1024**2).toFixed(1)} MB` : ''}</span>{job.error ? <p className="job-error">{job.error}</p> : null}{job.status === 'ready' && job.expiresAt ? <small>{new Date(job.expiresAt * 1000).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}까지 받을 수 있어요</small> : null}</div>
               <div className="job-actions">{job.status === 'ready' ? <button className="download-button" disabled={Boolean(busy)} onClick={() => download(job)}><Icon name="download" />다운로드</button> : null}<button className="text-button" disabled={Boolean(busy)} onClick={() => action('delete', async () => { await api(`/api/jobs/${job.id}`, { method: 'DELETE' }); setRefresh((n) => n + 1); })}>{job.status === 'waiting' || job.status === 'downloading' ? '취소' : '목록에서 정리'}</button>{job.status === 'ready' ? <button className="text-button" onClick={() => setTranscribeJob(transcribeJob === job.id ? '' : job.id)}>전사하기</button> : null}</div>
@@ -291,7 +301,7 @@ function App() {
           </section>
         </div>
       </div>
-      <footer><span>강의 서랍 <span className="footer-caption">MADE FOR YOUR OWN PACE.</span></span><p>세종대학교 공식 서비스가 아닌 개인 도구입니다. 내려받은 강의는 개인 학습에 사용해 주세요.</p></footer>
+      <footer><span>강의 서랍 </span><p>세종대학교 공식 서비스가 아닌 개인 도구입니다. 내려받은 강의는 개인 학습에 사용해 주세요.</p></footer>
     </main>
   </div>;
 }

@@ -29,6 +29,7 @@ from pydantic import BaseModel, Field, SecretStr
 from .school import SchoolExpired, SchoolSession, UserError, lecture_id, safe_name
 from server.lecture.cli import PROJECT_ROOT
 from server.lecture.transcriber import Transcriber
+from server.lecture.study import StudyRunner
 from server.lecture.web import create_router
 from server.lecture.whisper import WhisperCli
 
@@ -292,6 +293,7 @@ class JobBody(BaseModel):
 
 def create_app(store=None, transcriber=None):
     transcriber = transcriber or Transcriber(Path(os.getenv("LECTURE_ROOT") or PROJECT_ROOT), WhisperCli.from_env)
+    study = StudyRunner(transcriber.root)
 
     @asynccontextmanager
     async def lifespan(app):
@@ -319,6 +321,7 @@ def create_app(store=None, transcriber=None):
         try:
             yield
         finally:
+            await asyncio.to_thread(study.close)
             await asyncio.to_thread(transcriber.close)  # stop Whisper first so shutdown is quick
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
@@ -330,6 +333,7 @@ def create_app(store=None, transcriber=None):
 
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None)
     app.state.transcriber = transcriber
+    app.state.study = study
     app.include_router(create_router())
     origins = os.getenv("FRONTEND_ORIGINS", "http://localhost:4317,http://127.0.0.1:4317").split(",")
     app.add_middleware(CORSMiddleware, allow_origins=[o.strip() for o in origins],

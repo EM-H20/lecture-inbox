@@ -10,6 +10,7 @@ import shutil
 import tempfile
 import time
 from pathlib import Path
+from typing import Annotated, Literal
 from urllib.parse import unquote
 
 import pypdfium2 as pdfium
@@ -19,7 +20,7 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
 from server.lecture.catalog import list_courses
-from server.lecture.layout import LayoutError, documents_dir, pages_dir, safe_document, sources_dir, transcript_dir
+from server.lecture.layout import LayoutError, documents_dir, output_dir, pages_dir, safe_document, sources_dir, transcript_dir
 from server.lecture.pdf import MAX_BYTES as MAX_PDF_BYTES
 from server.lecture.pdf import MAX_PAGES, PdfError, delete_document, prepare_document
 from server.lecture.transcriber import Transcriber
@@ -45,6 +46,11 @@ def get_transcriber(request: Request) -> Transcriber:
 
 class CourseBody(BaseModel):
     name: str = Field(min_length=1, max_length=100)
+
+
+class StudyBody(BaseModel):
+    agent: Literal["claude", "gemini", "codex"]
+    stems: list[Annotated[str, Field(pattern=r"^week_[0-9]{2}_[0-9]{2}$")]] = Field(min_length=1, max_length=9801)
 
 
 class FromJobBody(BaseModel):
@@ -141,6 +147,36 @@ def create_router() -> APIRouter:
         path = transcript_dir(transcriber.root, course) / f"{stem}.md"
         if not path.is_file():
             raise HTTPException(404, "전사체를 찾을 수 없습니다.")
+        return {"stem": stem, "text": path.read_text(encoding="utf-8")}
+
+    @router.get("/study")
+    def study_status(request: Request):
+        return request.app.state.study.status()
+
+    @router.post("/courses/{course}/study", status_code=202)
+    def start_study(body: StudyBody, request: Request, course: str = PathParam(min_length=1, max_length=100),
+                    transcriber: Transcriber = Depends(get_transcriber)):
+        folder = course_folder(transcriber, course)
+        try:
+            return request.app.state.study.submit(folder.name, body.agent, body.stems)
+        except LayoutError as error:
+            raise HTTPException(409, str(error)) from None
+
+    @router.delete("/study/{job_id}")
+    def cancel_study(request: Request, job_id: str = PathParam(pattern=r"^[0-9a-f]{16}$")):
+        try:
+            return request.app.state.study.cancel(job_id)
+        except KeyError:
+            raise HTTPException(404, "정리 작업을 찾을 수 없습니다.") from None
+
+    @router.get("/courses/{course}/notes/{stem}")
+    def note(course: str = PathParam(min_length=1, max_length=100),
+             stem: str = PathParam(pattern=r"^week_[0-9]{2}_[0-9]{2}$"),
+             transcriber: Transcriber = Depends(get_transcriber)):
+        folder = course_folder(transcriber, course)
+        path = output_dir(transcriber.root, folder.name) / "notes" / f"{stem}.md"
+        if not path.is_file():
+            raise HTTPException(404, "정리 노트를 찾을 수 없습니다.")
         return {"stem": stem, "text": path.read_text(encoding="utf-8")}
 
     @router.put("/courses/{course}/documents/{name}")

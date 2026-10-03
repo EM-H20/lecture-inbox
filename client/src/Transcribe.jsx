@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import CoursePicker from './CoursePicker.jsx';
 import LectureFields from './LectureFields.jsx';
+import Study from './Study.jsx';
 import {
   JOB_LABELS, canStartTranscription, documentPath, effectiveForce, findLecture, formatElapsed, formatSize, isActive,
   isLectureNumber, lectureLabel, localFetch, stemOf, uploadFile,
@@ -153,77 +154,81 @@ export default function Transcribe({ active }) {
       {message ? <div className={`message ${message.kind === 'error' ? 'error' : 'success'}`} role={message.kind === 'error' ? 'alert' : 'status'}>{message.text}</div> : null}
     </div>
 
-    <section className="panel">
-      <div className="step"><span>01 / COURSE</span></div>
-      <h2>어떤 강의인가요?</h2>
-      <p className="muted">전사체와 교안은 <code>sources/강의이름/</code> 폴더에 저장됩니다.</p>
-      <CoursePicker idPrefix="local" courses={courses} value={course} disabled={uploading}
-        onSelect={(name) => { setCourse(name); setForce(false); setViewer(null); setPdfResults([]); }}
-        onCreated={async (name) => { await reloadCourses(name); setMessage({ kind: 'success', text: `'${name}' 강의를 만들었어요.` }); }} />
-      {selected ? <div className="pdf-state">
-        <div className="pdf-head">
-          <span>{selected.documents.length ? `교안 ${selected.documents.length}개` : '교안 없음 (없어도 전사는 할 수 있어요)'}</span>
-          {pdfBatch ? <span className="progress" role="status">
-            {pdfBatch.total > 1 ? `${pdfBatch.total}개 중 ${pdfBatch.current}번째 · ` : ''}{pdfBatch.name} — {pdfProcessing
-              ? '올리기 완료 · 쪽 이미지를 만드는 중입니다. 쪽 수가 많으면 1분 넘게 걸릴 수 있어요.'
-              : `올리는 중 ${Math.round(pdfProgress * 100)}%`}</span>
-            : <label className="file-button" aria-disabled={uploading}>교안 PDF 올리기 (여러 개 선택 가능)
-              <input type="file" multiple accept="application/pdf,.pdf" disabled={uploading}
-                onChange={(event) => { const files = [...event.target.files]; event.target.value = ''; if (files.length) sendPdfs(files); }} /></label>}
-        </div>
-        {selected.documents.length ? <ul className="doc-list" aria-label="올린 교안">
-          {selected.documents.map((doc) => <li key={doc.name}>
-            <span>{doc.name}</span><span className="muted">{doc.pages ? `${doc.pages}쪽` : '쪽 이미지 없음'}</span>
-            <button className="text-button" disabled={Boolean(pdfBatch)} onClick={() => removeDocument(doc.name)}>삭제</button>
-          </li>)}
-        </ul> : null}
-        {pdfResults.length ? <ul className="pdf-results" aria-label="교안 올리기 결과">
-          {pdfResults.map((result, index) => <li key={`${index}-${result.name}`} className={result.ok ? 'ok' : 'error'} role={result.ok ? 'status' : 'alert'}>
-            {result.ok ? '✓' : '!'} {result.name} — {result.text}</li>)}
-        </ul> : null}
-      </div> : null}
+    <section className="panel course-overview" aria-label="과목 선택">
+      <div className="course-choice-area">
+        <span className="section-kicker">01 · 과목 선택</span>
+        <h2>어떤 과목을 공부할까요?</h2>
+        <CoursePicker idPrefix="local" courses={courses} value={course} disabled={uploading || Boolean(pdfBatch)}
+          onSelect={(name) => { setCourse(name); setForce(false); setViewer(null); setPdfResults([]); }}
+          onCreated={async (name) => { await reloadCourses(name); setMessage({ kind: 'success', text: `'${name}' 강의를 만들었어요. 이제 교안이나 영상을 추가하세요.` }); }} />
+      </div>
+      <div className="course-summary">
+        <p>{selected?.lectures.length ? '전사가 끝났다면 회차를 골라 바로 정리하세요.' : '처음이라면 과목을 만들고, 가진 영상을 올려 주세요.'}</p>
+        {selected?.lectures.length > 0 ? <a className="text-button note-link" href="#study-lectures">정리할 회차로 이동 ↗</a> : null}
+        <dl><div><dt>교안</dt><dd>{selected?.documents.length || 0}<span>개</span></dd></div><div><dt>전사된 강의</dt><dd>{selected?.lectures.length || 0}<span>개</span></dd></div><div><dt>완성된 노트</dt><dd>{selected?.lectures.filter((item) => item.hasNote).length || 0}<span>개</span></dd></div></dl>
+      </div>
     </section>
 
-    {selected ? <section className="panel">
-      <div className="step"><span>02 / LECTURE</span></div>
-      <h2>몇 주차 몇 번째 강의인가요?</h2>
-      <LectureFields idPrefix="local" week={week} session={session} disabled={uploading}
-        onWeek={(value) => { setWeek(value); setForce(false); }} onSession={(value) => { setSession(value); setForce(false); }}
-        existing={Boolean(existing)} force={force} onForce={setForce} />
-      {!numbersOk ? <p className="hint" role="alert">주차와 차시는 1~99 사이 숫자여야 합니다.</p> : null}
-      {selected.lectures.length > 0 ? <ul className="lecture-list" aria-label="이 강의의 전사 기록">
-        {selected.lectures.map((item) => <li key={item.stem}>
-          <strong>{lectureLabel(item.week, item.session)}</strong>
-          <span className="lecture-badges"><span className="badge on">전사됨</span><span className={`badge${item.hasNote ? ' on' : ''}`}>{item.hasNote ? '정리 노트 있음' : '정리 노트 없음'}</span></span>
-          <button className="secondary" onClick={() => view(selected.name, item.week, item.session)}>전사체 보기</button>
-        </li>)}
-      </ul> : null}
-    </section> : null}
-
-    {selected ? <section className="panel">
-      <div className="step"><span>03 / VIDEO</span></div>
-      <h2>영상을 올려 전사하기</h2>
-      <p className="muted">올린 영상은 전사가 끝나면 지워집니다. 전사는 한 번에 하나씩 진행돼요.</p>
-      <div className={`dropzone${dragging ? ' dragging' : ''}${video ? ' has-file' : ''}`}
-        onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={(event) => { event.preventDefault(); setDragging(false); const file = event.dataTransfer.files[0]; if (file && !uploading) setVideo(file); }}>
-        <input id="videoFile" type="file" accept="video/*,audio/*,.mkv,.m4a,.mp3,.wav" disabled={uploading}
-          onChange={(event) => { const file = event.target.files[0]; event.target.value = ''; if (file) setVideo(file); }} />
-        <label htmlFor="videoFile">{video ? `${video.name} · ${formatSize(video.size)}` : '영상 파일을 끌어다 놓거나 눌러서 선택하세요'}</label>
-      </div>
-      {uploading ? <div className="progress" role="status">올리는 중 {Math.round(progress * 100)}%
-        <div className="progress-bar"><i style={{ width: `${Math.round(progress * 100)}%` }} /></div></div> : null}
-      <div className="form-bottom">
-        <span>{existing && !force ? '이미 전사된 회차입니다. 덮어쓰려면 위에서 체크해 주세요.' : numbersOk ? `저장 위치: sources/${selected.name}/전사/${stemOf(week, session)}.md` : ''}</span>
-        {uploading ? <button className="secondary" onClick={() => upload.current?.abort()}>업로드 취소</button>
-          : <button className="primary" disabled={!canStart} onClick={start}>전사 시작</button>}
-      </div>
-    </section> : null}
+    {selected ? <div className={`learning-workspace${selected.lectures.length ? ' has-lectures' : ''}`}>
+      <section className="panel preparation" aria-label="자료 준비">
+        <span className="section-kicker">02 · 자료 준비</span>
+        <h2>공부할 자료 담기</h2>
+        <p className="muted">영상은 글로 옮기고, 교안은 정리의 근거로 사용합니다.</p>
+        <div className="prepare-section">
+          <div className="selection-heading"><h3>교안 추가</h3><span>선택 사항</span></div>
+          <p className="muted">PDF를 함께 올리면 표·그림·수식까지 참고합니다. 교안이 없어도 전사 내용으로 정리할 수 있어요.</p>
+          <div className="pdf-state">
+            <div className="pdf-head">
+              {pdfBatch ? <span className="progress" role="status">
+                {pdfBatch.total > 1 ? `${pdfBatch.total}개 중 ${pdfBatch.current}번째 · ` : ''}{pdfBatch.name} — {pdfProcessing
+                  ? '교안 페이지 준비 중… 잠시 기다려 주세요.' : `올리는 중 ${Math.round(pdfProgress * 100)}%`}</span>
+                : <label className="file-button" aria-disabled={uploading}>+ 교안 PDF 추가
+                  <input type="file" multiple accept="application/pdf,.pdf" disabled={uploading} aria-label="교안 PDF 추가"
+                    onChange={(event) => { const files = [...event.target.files]; event.target.value = ''; if (files.length) sendPdfs(files); }} /></label>}
+              <span>{selected.documents.length}개 준비됨</span>
+            </div>
+            {selected.documents.length ? <ul className="doc-list" aria-label="올린 교안">
+              {selected.documents.map((doc) => <li key={doc.name}>
+                <span>{doc.name}<small>{doc.pages ? `${doc.pages}쪽` : '쪽 이미지 없음'}</small></span>
+                <button className="text-button" aria-label={`${doc.name} 교안 삭제`} disabled={Boolean(pdfBatch)} onClick={() => removeDocument(doc.name)}>삭제</button>
+              </li>)}
+            </ul> : null}
+            {pdfResults.length ? <ul className="pdf-results" aria-label="교안 올리기 결과">
+              {pdfResults.map((result, index) => <li key={`${index}-${result.name}`} className={result.ok ? 'ok' : 'error'} role={result.ok ? 'status' : 'alert'}>
+                {result.ok ? '✓' : '!'} {result.name} — {result.text}</li>)}
+            </ul> : null}
+          </div>
+        </div>
+        <div className="prepare-section" id="prepare-video">
+          <h3>새 영상 전사</h3>
+          <p className="muted">전사는 영상 속 말을 글로 옮기는 작업입니다. 주차·차시를 정한 뒤 영상이나 음성을 올려 주세요.</p>
+          <LectureFields idPrefix="local" week={week} session={session} disabled={uploading}
+            onWeek={(value) => { setWeek(value); setForce(false); }} onSession={(value) => { setSession(value); setForce(false); }}
+            existing={Boolean(existing)} force={force} onForce={setForce} />
+          {!numbersOk ? <p className="hint" role="alert">주차와 차시는 1~99 사이 숫자여야 합니다.</p> : null}
+          <div className={`dropzone${dragging ? ' dragging' : ''}${video ? ' has-file' : ''}`}
+            onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(event) => { event.preventDefault(); setDragging(false); const file = event.dataTransfer.files[0]; if (file && !uploading) setVideo(file); }}>
+            <input id="videoFile" type="file" accept="video/*,audio/*,.mkv,.m4a,.mp3,.wav" disabled={uploading}
+              onChange={(event) => { const file = event.target.files[0]; event.target.value = ''; if (file) setVideo(file); }} />
+            <label htmlFor="videoFile">{video ? <><strong>{video.name}</strong><small>{formatSize(video.size)} · 눌러서 파일 변경</small></> : <><strong>+ 영상 또는 음성 선택</strong><small>이곳에 파일을 끌어다 놓아도 됩니다</small></>}</label>
+          </div>
+          {uploading ? <div className="progress" role="status">올리는 중 {Math.round(progress * 100)}%
+            <div className="progress-bar"><i style={{ width: `${Math.round(progress * 100)}%` }} /></div></div> : null}
+          <div className="form-bottom">
+            <span>{existing && !force ? '이미 전사된 회차입니다. 정리 영역에서 선택할 수 있어요.' : !video ? '파일을 선택하면 전사를 시작할 수 있어요.' : '전사가 끝나면 정리할 회차에 자동으로 추가됩니다.'}</span>
+            {uploading ? <button className="secondary" onClick={() => upload.current?.abort()}>업로드 취소</button>
+              : <button className="primary" disabled={!canStart} onClick={start}>전사 시작</button>}
+          </div>
+        </div>
+      </section>
+      <Study key={selected.name} course={selected} active={active} reloadCourses={reloadCourses} preparing={Boolean(pdfBatch)} />
+    </div> : null}
 
     <section className="panel files">
-      <div className="files-header"><div><span className="eyebrow">TRANSCRIBE</span><h2>전사 작업 <span className="count">{jobs.length}</span></h2></div></div>
-      {jobs.length === 0 ? <div className="empty"><h3>아직 작업이 없어요</h3><p>영상을 올리면 여기에 진행 상태가 표시됩니다.</p></div>
+      <div className="files-header"><div><span className="eyebrow">작업 현황</span><h2>영상 전사 진행 상태 <span className="count">{jobs.length}</span></h2></div></div>
+      {jobs.length === 0 ? <div className="empty"><h3>진행 중인 전사가 없어요</h3><p>새 영상을 전사하면 여기에 진행 상태가 표시됩니다. 완료된 회차는 위 정리 영역에서 선택하세요.</p></div>
         : <ul className="job-list">{jobs.map((job) => <li key={job.id}>
           <div className="file-details">
             <strong>{job.filename}</strong>
@@ -241,7 +246,7 @@ export default function Transcribe({ active }) {
         <p className="viewer-path"><code>sources/{viewer.course}/전사/{viewer.stem}.md</code></p>
         <pre>{viewer.text || '(내용이 없습니다)'}</pre>
       </div> : null}
-      <div className="files-note">전사 결과는 이 컴퓨터의 <code>sources/강의이름/전사/</code> 폴더에 저장되고, 서버를 껐다 켜도 남아 있습니다. 작업 목록은 서버를 다시 켜면 비워집니다.</div>
+      <div className="files-note">전사가 끝난 자료는 서버를 다시 켜도 보관됩니다. 이 작업 기록은 재시작하면 비워지며, 보관된 회차는 위 정리 영역에서 확인할 수 있습니다.</div>
     </section>
   </div>;
 }
