@@ -75,6 +75,8 @@ def note_problems(text, course, root, transcript=None):
     h2 = [(i, l[3:].strip()) for i, l in enumerate(lines) if l.startswith("## ")]
     names = [name for _, name in h2]
     concepts = names[1:-2]
+    if concepts[:1] == ["교수님 강조"]:  # optional, only directly after the summary
+        concepts = concepts[1:]
     if names[:1] != ["핵심 암기사항"] or names[-2:] != ["예상문제와 해설", "불확실한 내용"] or not concepts \
             or any(not name.startswith(f"{n}. ") for n, name in enumerate(concepts, 1)):
         problems.append("## 제목은 핵심 암기사항 → 1. … 2. …(번호순 개념) → 예상문제와 해설 → 불확실한 내용 순서여야 합니다.")

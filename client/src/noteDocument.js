@@ -17,7 +17,8 @@ export function parseNote(text) {
     const end = headings[index + 1]?.position.start.offset ?? text.length;
     const title = plain(heading).trim();
     const kind = /^(핵심 요약|핵심 암기사항)$/.test(title) ? 'summary'
-      : /^(예상문제와 해설|연습문제)$/.test(title) ? 'practice'
+      : title === '교수님 강조' ? 'emphasis'
+        : /^(예상문제와 해설|연습문제)$/.test(title) ? 'practice'
         : /^(불확실한 내용|확인 필요한 내용)$/.test(title) ? 'uncertain' : 'concept';
     return { id: `note-section-${index}`, title, kind, text: text.slice(start, end),
       nodes: tree.children.filter((node) => node.position.start.offset > start && node.position.start.offset < end) };

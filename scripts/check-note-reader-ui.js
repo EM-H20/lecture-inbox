@@ -18,6 +18,16 @@ async (page) => {
 
 근거: 교안 p.10 · 전사 [00:21:41]
 
+## 교수님 강조
+
+**반드시 외우기**
+
+- 수온은 단위까지 기억 — [00:21:41]
+
+**외울 필요 없음**
+
+- 연도는 외우지 않아도 됨 — [00:21:41]
+
 ## 1. 개념과 수식
 
 분산과 용해는 다릅니다. 수식 예시: $E=mc^2$.
@@ -80,7 +90,12 @@ $$
     check(!await reader.getByText('교안 p.10 · 전사 [00:21:41]',{exact:false}).isVisible(),'Sources not folded');
     await reader.getByText('교안·강의 근거 펼치기',{exact:true}).click();
     check(await reader.getByText('근거: 교안 p.10 · 전사 [00:21:41]',{exact:true}).isVisible(),'Source did not expand');
-    await reader.getByRole('button',{name:/개념 읽기 이유/}).click();
+    await reader.getByRole('button',{name:'교수님 강조 →'}).click();
+    check(await reader.getByRole('button',{name:/교수님 강조 외울/}).getAttribute('aria-pressed')==='true','Emphasis mode not opened');
+    check(await reader.getByText('연도는 외우지 않아도 됨',{exact:false}).isVisible(),'Skip-memorizing item missing');
+    check(!await reader.getByText('분산과 용해는 다릅니다',{exact:false}).isVisible(),'Concept leaked into emphasis mode');
+    await reader.getByRole('button',{name:'개념 읽기 →'}).click();
+    check(!await reader.getByText('수온은 단위까지 기억',{exact:false}).isVisible(),'Emphasis leaked into concept mode');
     await reader.locator('.katex').first().waitFor();
     await p.waitForFunction(()=>document.querySelector('.note-figure img')?.naturalWidth>0);
     await reader.getByText(/교안을 불러오지 못했습니다/).waitFor();
@@ -106,6 +121,6 @@ $$
     check(!await reader.isVisible(),'Escape did not close');
     check(await opener.evaluate(node=>node===document.activeElement),'Focus not returned to opener');
     check(errors.length===0,errors.join('\n'));
-    return {summary:true,markdownTables:true,math:true,safeImages:true,imageFailure:true,sourceDisclosure:true,quiz:true,keyboard:true,focusReturn:true,retry:true,responsive:true};
+    return {summary:true,markdownTables:true,math:true,safeImages:true,imageFailure:true,sourceDisclosure:true,emphasis:true,quiz:true,keyboard:true,focusReturn:true,retry:true,responsive:true};
   } finally { await context.close(); }
 }

@@ -45,3 +45,8 @@ test('inserted page Markdown preserves captions and filenames as one image', () 
   assert.equal(pageImageUrl(image.url, '강의'), '/api/local/courses/%EA%B0%95%EC%9D%98/pages/100%25%20%5B%EA%B8%B0%EB%B3%B8%5D%20%231%20(%EA%B5%90%EC%95%88)/p002.png');
   assert.match(pageMarkdown('강의', '교안', 'p010.png'), /교안 · p.10/);
 });
+
+test('emphasis section is its own kind and never counted as a concept', () => {
+  const note = parseNote('# 노트\n## 핵심 암기사항\n핵심\n## 교수님 강조\n- 외우기 — [00:00:01]\n## 1. 개념\n설명\n## 불확실한 내용\n없음');
+  assert.deepEqual(note.sections.map(s => s.kind), ['summary', 'emphasis', 'concept', 'uncertain']);
+});

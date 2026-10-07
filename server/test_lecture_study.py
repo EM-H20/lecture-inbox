@@ -52,6 +52,24 @@ class NoteShapeTests(unittest.TestCase):
             with self.subTest(name):
                 self.assertNotEqual(self.problems(text), [])
 
+    def test_optional_emphasis_section_sits_right_after_summary(self):
+        emphasis = '## 교수님 강조\n\n**반드시 외우기**\n- 단위까지 기억 — [00:00:00]\n\n'
+        with_emphasis = NOTE.replace('## 1. 개념', emphasis + '## 1. 개념')
+        self.assertEqual(self.problems(with_emphasis), [])
+        for name, text in {
+            'before summary': NOTE.replace('## 핵심 암기사항', emphasis + '## 핵심 암기사항'),
+            'after concepts': NOTE.replace('## 예상문제와 해설', emphasis + '## 예상문제와 해설'),
+            'twice': with_emphasis.replace('## 1. 개념', emphasis + '## 1. 개념'),
+        }.items():
+            with self.subTest(name):
+                self.assertNotEqual(self.problems(text), [])
+
+    def test_emphasis_timestamps_are_checked_against_the_transcript(self):
+        emphasis = '## 교수님 강조\n\n- 외우기 — [00:09:09]\n\n'
+        text = NOTE.replace('## 1. 개념', emphasis + '## 1. 개념')
+        problems = note_problems(text, '강의', self.root, '[00:00:00] 내용')
+        self.assertTrue(any('00:09:09' in item for item in problems))
+
     def test_headings_inside_code_blocks_are_ignored(self):
         self.assertEqual(self.problems(NOTE.replace('설명', '```md\n## 핵심 암기사항\n```')), [])
 

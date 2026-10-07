@@ -60,6 +60,7 @@ function NoteMarkdown({ text, course, definitions = '' }) {
 
 function ReadingContent({ document, course }) {
   const summaries = document.sections.filter((section) => section.kind === 'summary');
+  const emphases = document.sections.filter((section) => section.kind === 'emphasis');
   const concepts = document.sections.filter((section) => section.kind === 'concept');
   const uncertain = document.sections.filter((section) => section.kind === 'uncertain');
   const [mode, setMode] = useState(summaries.length ? 'summary' : 'all');
@@ -67,12 +68,16 @@ function ReadingContent({ document, course }) {
   const heading = useRef(null);
   const modes = [
     { id: 'summary', label: '핵심 훑기', hint: '먼저 기억할 내용', available: summaries.length > 0 },
+    { id: 'emphasis', label: '교수님 강조', hint: '외울 것·안 외울 것', available: emphases.length > 0 },
     { id: 'concept', label: '개념 읽기', hint: '이유와 차이 이해하기', available: concepts.length > 0 },
     { id: 'practice', label: '문제로 확인', hint: '답을 떠올린 뒤 확인', available: document.questions.length > 0 },
     { id: 'all', label: '전체 읽기', hint: '노트 내용 모두 보기', available: true },
   ];
   const current = modes.find((item) => item.id === mode);
   const markdown = (text) => <NoteMarkdown text={text} course={course} definitions={document.definitions} />;
+  const next = mode === 'summary' && emphases.length ? ['emphasis', '교수님 강조 →']
+    : mode !== 'concept' && concepts.length ? ['concept', '개념 읽기 →']
+      : document.questions.length ? ['practice', '문제 풀어보기 →'] : ['all', '전체 내용 읽기 →'];
   function choose(id) {
     setMode(id);
     heading.current?.focus();
@@ -87,14 +92,14 @@ function ReadingContent({ document, course }) {
       <header className="note-intro"><p className="note-eyebrow">{course} · 시험 대비 노트</p><h1>{document.title}</h1></header>
       <h2 className="note-mode-heading" ref={heading} tabIndex={-1}>{current.label}</h2>
       {mode === 'all' ? <><p className="note-help">저장된 노트의 전체 내용입니다. 이 모드에는 문제의 정답도 함께 표시됩니다.</p>{markdown(document.text)}</> : null}
-      {mode === 'summary' || mode === 'concept' ? <>
+      {mode === 'summary' || mode === 'emphasis' || mode === 'concept' ? <>
         {mode === 'summary' ? <p className="note-help">이 노트에 정리된 핵심 내용입니다. 강의 전체의 시험 범위를 뜻하지는 않습니다.</p> : null}
+        {mode === 'emphasis' ? <p className="note-help">강의에서 교수님이 직접 말한 강조입니다. ‘외울 필요 없음’도 함께 확인하세요. 시각은 전사 기준이며 실제 출제를 보장하지 않습니다.</p> : null}
         {mode === 'concept' && concepts.length > 1 ? <nav className="note-toc" aria-label="개념 목차">{concepts.map((section) => <a key={section.id} href={`#${section.id}`}>{section.title}</a>)}</nav> : null}
-        {(mode === 'summary' ? summaries : concepts).map((section) => <section className="note-chapter" key={section.id} id={section.id} tabIndex={-1}>{markdown(section.text)}</section>)}
+        {({ summary: summaries, emphasis: emphases, concept: concepts })[mode].map((section) => <section className="note-chapter" key={section.id} id={section.id} tabIndex={-1}>{markdown(section.text)}</section>)}
         {uncertain.map((section) => <details className="note-uncertain" key={section.id}><summary>확인 필요한 내용 · 펼쳐 보기</summary>{markdown(section.text)}</details>)}
-        <div className="note-next"><p>{mode === 'summary' ? '핵심을 봤다면 이유와 차이를 이해해 보세요.' : '내용을 보지 않고 설명할 수 있는지 확인해 보세요.'}</p>
-          <button className="primary" onClick={() => choose(mode === 'summary' && concepts.length ? 'concept' : document.questions.length ? 'practice' : 'all')}>
-            {mode === 'summary' && concepts.length ? '개념 읽기 →' : document.questions.length ? '문제 풀어보기 →' : '전체 내용 읽기 →'}</button></div>
+        <div className="note-next"><p>{mode === 'concept' ? '내용을 보지 않고 설명할 수 있는지 확인해 보세요.' : '핵심을 봤다면 이유와 차이를 이해해 보세요.'}</p>
+          <button className="primary" onClick={() => choose(next[0])}>{next[1]}</button></div>
       </> : null}
       {mode === 'practice' ? <><p className="note-help">강의 자료로 만든 연습문제이며 실제 출제 예측이 아닙니다. 먼저 답을 떠올리고 해설을 여세요. 입력한 답은 이 노트를 닫으면 사라집니다.</p>
         {document.questions.map((question, index) => <section className="note-question" key={index}>
