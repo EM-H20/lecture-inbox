@@ -31,6 +31,30 @@ lecture-inbox/
 
 Windows는 지원하지 않습니다(`.venv/bin/python` 경로를 쓰므로 WSL이 필요합니다).
 
+#### 시작 전에: 권장 사양
+
+전사는 정확도가 가장 높은 Whisper **large-v3** 모델을 기본으로 씁니다(작성자 환경: M4 Pro, 메모리 48GB). 이 모델 기준 사양입니다.
+
+| 항목 | 권장 | 최소 |
+| --- | --- | --- |
+| Mac | Apple Silicon (M1 이상) | Intel Mac도 실행되지만 전사가 매우 느립니다 |
+| 메모리 | 16GB 이상 | 8GB (large-v3가 전사 중 약 4GB를 씁니다. 브라우저·AI 에이전트와 함께 쓰면 빠듯합니다) |
+| 저장 공간 | 여유 10GB 이상 | 모델 약 3GB + 개발 도구·패키지 + 전사 중 영상 임시 파일 |
+| macOS | 최신 버전 | Antigravity를 쓰려면 macOS 12 이상 |
+| 인터넷 | 처음 설치(모델 3GB 포함)와 AI 정리에 필요 | 전사 자체는 오프라인으로 됩니다 |
+
+사양이 낮으면 설치 중 경고가 나옵니다. 이때는 가벼운 모델을 받아 쓰세요: `npm run lecture -- models --size medium` 후 `WHISPER_MODEL=medium npm run dev` (정확도는 낮아집니다).
+
+**AI 에이전트 계정** — 시험 대비 노트 정리에는 아래 중 **하나**의 계정이 필요합니다(전사만 할 거면 필요 없습니다). 설치 스크립트가 고르는 대로 설치하고 로그인까지 안내합니다.
+
+| 에이전트 | 필요한 계정 | 직접 설치할 때 | 로그인 |
+| --- | --- | --- | --- |
+| Claude Code | Claude Pro/Max 등 Anthropic 계정 | `curl -fsSL https://claude.ai/install.sh \| bash` | `claude auth login` |
+| Codex | ChatGPT 유료 요금제 계정 | `brew install --cask codex` | `codex login` |
+| Antigravity | Google 계정 | `curl -fsSL https://antigravity.google/cli/install.sh \| bash` | `agy` 실행 후 안내대로 |
+
+직접 설치했다면 터미널을 새로 연 뒤 로그인하세요.
+
 #### 처음 한 번만: 설치 (명령 한 줄)
 
 Node.js·Homebrew·git이 **없어도** 됩니다. 이미 설치돼 있으면 그대로 쓰고, 없는 것만 설치합니다.
@@ -46,7 +70,8 @@ Node.js·Homebrew·git이 **없어도** 됩니다. 이미 설치돼 있으면 �
    현재 위치에 `lecture-inbox` 폴더를 만들어 프로젝트를 받고, 안에서 `setup.sh`를 이어서 실행합니다. `setup.sh`가 하는 일은 이렇습니다.
    - Homebrew → Node.js(22.12 이상), Python(3.10 이상), ffmpeg, whisper-cpp 순서로 **없는 것만** 설치합니다. 시스템에 설치하기 전에는 항상 "설치할까요? (y/N)"로 먼저 묻습니다(`y` 입력 후 Enter).
    - 웹 화면 패키지와 Python 환경을 준비하고, `sources/`·`output/`·`models/` 폴더를 만듭니다.
-   - Whisper 모델(약 3GB)을 받을지 묻습니다.
+   - 노트 정리에 쓸 AI 에이전트(Claude Code / Codex / Antigravity)를 하나 골라 설치하고 로그인할지 묻습니다. 이미 하나라도 있으면 건너뜁니다.
+   - 사양을 확인해 권장보다 낮으면 알려 주고, Whisper 모델(large-v3, 약 3GB)을 받을지 묻습니다.
 
    | 내 Mac 상태 | 진행 |
    | --- | --- |
