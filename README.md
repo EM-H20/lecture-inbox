@@ -16,6 +16,7 @@ lecture-inbox/
 ├── client/        # React + Vite
 ├── server/        # FastAPI, 전사 파이프라인(server/lecture), 테스트, Python 의존성
 ├── scripts/       # 통합 개발 실행·설치·e2e
+├── install.sh     # 한 줄 설치(Mac): 프로젝트 받기 + setup.sh
 ├── setup.sh       # 처음 설치(Mac)
 ├── 정리-지침.md    # AI 에이전트용 정리 지침
 └── package.json   # npm workspace 및 통합 명령
@@ -30,28 +31,38 @@ lecture-inbox/
 
 Windows는 지원하지 않습니다(`.venv/bin/python` 경로를 쓰므로 WSL이 필요합니다).
 
-#### 처음 한 번만: 설치 (Node.js + 명령 한 줄)
+#### 처음 한 번만: 설치 (명령 한 줄)
 
-1. **Node.js 설치** — [nodejs.org](https://nodejs.org)에서 **LTS** 설치 파일(.pkg)을 받아 더블클릭하고 안내대로 진행합니다. 설치 후 터미널(`⌘ + Space` → `터미널` → Enter)에서 `node -v`를 쳐서 `v22.12` 이상이 나오면 됩니다. Homebrew가 이미 있다면 `brew install node`로도 됩니다.
+Node.js·Homebrew·git이 **없어도** 됩니다. 이미 설치돼 있으면 그대로 쓰고, 없는 것만 설치합니다.
+
+1. **터미널 열기** — `⌘ + Space` → `터미널` → Enter
 2. **설치 폴더를 둘 위치로 이동** — 예: `cd ~/Documents`
-3. **설치 명령**
+3. **아래 명령을 붙여 넣고 Enter**
 
    ```bash
-   npx github:EM-H20/lecture-inbox
+   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/EM-H20/lecture-inbox/main/install.sh)"
    ```
 
-   현재 위치에 `lecture-inbox` 폴더를 만들고 설치까지 이어서 진행합니다(폴더 이름을 바꾸려면 명령 끝에 이름을 붙이세요). 이미 내용이 있는 폴더에는 설치하지 않습니다. 안에서 `setup.sh`가 하는 일은 이렇습니다.
-   - Homebrew, Python, ffmpeg, whisper-cpp 중 없는 것만 설치합니다. 시스템에 설치하기 전에는 항상 "설치할까요? (y/N)"로 먼저 묻습니다.
+   현재 위치에 `lecture-inbox` 폴더를 만들어 프로젝트를 받고, 안에서 `setup.sh`를 이어서 실행합니다. `setup.sh`가 하는 일은 이렇습니다.
+   - Homebrew → Node.js(22.12 이상), Python(3.10 이상), ffmpeg, whisper-cpp 순서로 **없는 것만** 설치합니다. 시스템에 설치하기 전에는 항상 "설치할까요? (y/N)"로 먼저 묻습니다(`y` 입력 후 Enter).
    - 웹 화면 패키지와 Python 환경을 준비하고, `sources/`·`output/`·`models/` 폴더를 만듭니다.
    - Whisper 모델(약 3GB)을 받을지 묻습니다.
+
+   | 내 Mac 상태 | 진행 |
+   | --- | --- |
+   | Homebrew·Node 둘 다 있음 | 둘 다 건너뛰고 Python·ffmpeg 등 빠진 것만 설치합니다. |
+   | Node는 있고 Homebrew는 없음 | Homebrew를 설치한 뒤 이어서 진행합니다. 설치된 Node가 22.12보다 낮으면 brew로 새 버전을 설치합니다. |
+   | 둘 다 없음 | Homebrew를 설치하고 Homebrew로 Node를 설치합니다. |
 
    **Homebrew가 없을 때** 설치 중에 이렇게 진행됩니다.
    - `Press RETURN/ENTER to continue`가 나오면 **Enter**를 누릅니다.
    - **Mac 비밀번호**를 묻습니다. 입력해도 화면에 안 보이는 게 정상입니다(관리자 계정이어야 합니다).
    - 개발자 도구 설치 창이 뜨면 **설치**를 누르고 끝날 때까지 기다립니다(몇 분).
-   - 끝나면 스크립트가 알아서 이어서 진행합니다. 새 터미널에서도 `brew`를 쓰도록 `~/.zprofile`에 한 줄 추가할지 물어봅니다.
+   - 끝나면 스크립트가 알아서 이어서 진행합니다. 새 터미널에서도 `brew`를 쓰도록 `~/.zprofile`에 한 줄 추가할지 물어봅니다(`y` 권장).
 
-   저장소가 공개되어 있어야 하고(`github:` 주소), 처음 실행에는 몇 분이 걸릴 수 있습니다.
+   **중간에 실패하거나 멈췄다면** 같은 위치(예: `~/Documents`)에서 같은 명령을 다시 실행하세요. 이미 받은 폴더를 그대로 쓰고 끝난 단계는 건너뜁니다. 처음 실행에는 몇 분이 걸릴 수 있습니다.
+
+   Node.js가 이미 있다면 `npx github:EM-H20/lecture-inbox`로도 같은 설치를 할 수 있습니다.
 
 ZIP 파일로 받았다면 압축을 풀고 터미널에서 그 폴더로 이동한 뒤(`cd ` 다음에 폴더를 터미널 창으로 끌어다 놓고 Enter) `bash setup.sh`를 실행하면 같은 설치가 진행됩니다.
 
@@ -63,13 +74,13 @@ npm run dev
 
 브라우저에서 http://127.0.0.1:4317 을 엽니다. 이 명령 하나로 웹 화면(4317)과 Python 백엔드(4318)가 함께 실행됩니다. 종료는 터미널에서 **Control+C**(둘 다 종료됩니다).
 
-처음 설치할 때 `npx`가 알려 준 대로 `cd lecture-inbox`로 들어가서 실행하세요. 다음부터는 설치 없이 이 폴더로 이동한 뒤 `npm run dev`만 하면 됩니다. 전사·교안 정리는 아래 "강의 전사와 교안 정리" 항목을 보세요.
+처음 설치가 끝나면 안내된 대로 `cd lecture-inbox`로 들어가서 실행하세요. 다음부터는 설치 없이 이 폴더로 이동한 뒤 `npm run dev`만 하면 됩니다. 전사·교안 정리는 아래 "강의 전사와 교안 정리" 항목을 보세요.
 
 #### 문제 해결
 
 | 증상 | 해결 |
 | --- | --- |
-| `command not found: npx` / `node` | Node.js를 설치하지 않았거나 설치 후 터미널을 새로 열지 않았습니다. 위 1번을 하고 터미널을 다시 엽니다. |
+| `command not found: npx` / `node` | 설치 직후라면 터미널을 닫고 새로 엽니다. 그래도 안 되면 설치 폴더에서 `bash setup.sh`를 다시 실행합니다. |
 | `command not found: brew` | 설치 폴더에서 `bash setup.sh`를 다시 실행하세요. 그래도 안 되면 터미널을 닫고 새로 엽니다. |
 | `먼저 npm run setup을 실행해 주세요.` | 프로젝트 폴더에서 `bash setup.sh`(또는 `npm run setup`)를 실행합니다. |
 | `address already in use` (4317/4318) | 이전 `npm run dev`가 아직 실행 중입니다. 그 터미널에서 Control+C로 끄세요. |
