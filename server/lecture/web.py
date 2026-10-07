@@ -8,6 +8,7 @@ import os
 import re
 import shutil
 import tempfile
+import threading
 import time
 from pathlib import Path
 from typing import Annotated, Literal
@@ -17,10 +18,11 @@ import pypdfium2 as pdfium
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi import Path as PathParam
 from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from server.lecture.catalog import list_courses
-from server.lecture.layout import LayoutError, documents_dir, output_dir, pages_dir, safe_document, sources_dir, transcript_dir
+from server.lecture.layout import LayoutError, documents_dir, pages_dir, safe_document, sources_dir, transcript_dir
 from server.lecture.pdf import MAX_BYTES as MAX_PDF_BYTES
 from server.lecture.pdf import MAX_PAGES, PdfError, delete_document, prepare_document
 from server.lecture.transcriber import Transcriber
@@ -49,8 +51,14 @@ class CourseBody(BaseModel):
 
 
 class StudyBody(BaseModel):
-    agent: Literal["claude", "gemini", "codex"]
+    agent: Literal["claude", "agy", "codex"]
     stems: list[Annotated[str, Field(pattern=r"^week_[0-9]{2}_[0-9]{2}$")]] = Field(min_length=1, max_length=9801)
+    replace: bool = False
+
+
+class NoteBody(BaseModel):
+    text: str = Field(min_length=1, max_length=1_000_000)
+    originalText: str = Field(max_length=1_000_000)
 
 
 class FromJobBody(BaseModel):
@@ -105,6 +113,15 @@ async def save_upload(request: Request, directory: Path, suffix: str, limit: int
 
 def create_router() -> APIRouter:
     router = APIRouter(prefix="/api/local", dependencies=[Depends(local_only)])
+    # ponytail: one local server process; use a shared file lock if multi-worker serving is introduced.
+    note_lock = threading.Lock()
+
+    def note_path(transcriber, course, stem):
+        folder = course_folder(transcriber, course)
+        path = transcriber.root.resolve() / "output" / folder.name / "notes" / f"{stem}.md"
+        if folder.name != course or path.resolve() != path.absolute() or not path.is_file():
+            raise HTTPException(404, "정리 노트를 찾을 수 없습니다.")
+        return path
 
     @router.get("/status")
     def status(transcriber: Transcriber = Depends(get_transcriber)):
@@ -158,7 +175,7 @@ def create_router() -> APIRouter:
                     transcriber: Transcriber = Depends(get_transcriber)):
         folder = course_folder(transcriber, course)
         try:
-            return request.app.state.study.submit(folder.name, body.agent, body.stems)
+            return request.app.state.study.submit(folder.name, body.agent, body.stems, body.replace)
         except LayoutError as error:
             raise HTTPException(409, str(error)) from None
 
@@ -173,11 +190,69 @@ def create_router() -> APIRouter:
     def note(course: str = PathParam(min_length=1, max_length=100),
              stem: str = PathParam(pattern=r"^week_[0-9]{2}_[0-9]{2}$"),
              transcriber: Transcriber = Depends(get_transcriber)):
-        folder = course_folder(transcriber, course)
-        path = output_dir(transcriber.root, folder.name) / "notes" / f"{stem}.md"
-        if not path.is_file():
-            raise HTTPException(404, "정리 노트를 찾을 수 없습니다.")
+        path = note_path(transcriber, course, stem)
         return {"stem": stem, "text": path.read_text(encoding="utf-8")}
+
+    @router.put("/courses/{course}/notes/{stem}")
+    def update_note(body: NoteBody, course: str = PathParam(min_length=1, max_length=100),
+                    stem: str = PathParam(pattern=r"^week_[0-9]{2}_[0-9]{2}$"),
+                    transcriber: Transcriber = Depends(get_transcriber)):
+        if not body.text.strip():
+            raise HTTPException(422, "노트 내용을 입력해 주세요.")
+        with note_lock:
+            path = note_path(transcriber, course, stem)
+            current = path.read_text(encoding="utf-8")
+            # A lost success response may be retried with the same original text.
+            if current != body.text and current != body.originalText:
+                raise HTTPException(409, "다른 곳에서 노트가 수정되었습니다. 작성한 내용을 저장해 둔 뒤 최신 노트를 다시 열어 주세요.")
+            if current != body.text:
+                temporary = None
+                try:
+                    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", prefix=".note-", dir=path.parent, delete=False) as out:
+                        temporary = Path(out.name)
+                        out.write(body.text)
+                        out.flush()
+                        os.fsync(out.fileno())
+                    os.replace(temporary, path)
+                except OSError:
+                    raise HTTPException(500, "노트를 저장하지 못했습니다. 작성한 내용은 화면에 남아 있으니 다시 시도해 주세요.") from None
+                finally:
+                    if temporary is not None:
+                        temporary.unlink(missing_ok=True)
+        return {"stem": stem, "text": body.text}
+
+    @router.get("/courses/{course}/pages")
+    def page_catalog(course: str = PathParam(min_length=1, max_length=100),
+                     transcriber: Transcriber = Depends(get_transcriber)):
+        folder = course_folder(transcriber, course)
+        base = transcriber.root.resolve() / "sources" / folder.name / "pages"
+        documents = []
+        if folder.name != course or not base.is_dir() or base.resolve() != base.absolute():
+            return {"documents": documents}
+        for directory in sorted(base.iterdir()):
+            if not directory.is_dir() or directory.is_symlink() or directory.name.startswith("."):
+                continue
+            pages = [path.name for path in sorted(directory.glob("p*.png"))
+                     if re.fullmatch(r"p[0-9]{3,}\.png", path.name) and path.is_file() and not path.is_symlink()]
+            if pages:
+                documents.append({"name": directory.name, "pages": pages})
+        return {"documents": documents}
+
+    @router.get("/courses/{course}/pages/{document}/{page}")
+    def page_image(course: str = PathParam(min_length=1, max_length=100),
+                   document: str = PathParam(min_length=1, max_length=200),
+                   page: str = PathParam(pattern=r"^p[0-9]{3,}\.png$"),
+                   transcriber: Transcriber = Depends(get_transcriber)):
+        folder = course_folder(transcriber, course)
+        if folder.name != course or document in (".", "..") or re.search(r"[/\\\x00-\x1f]", document):
+            raise HTTPException(400, "허용되지 않는 교안 경로입니다.")
+        path = transcriber.root.resolve() / "sources" / folder.name / "pages" / document / page
+        # Pages are generated files, never symlinks into another course or outside sources.
+        if path.resolve() != path.absolute() or not path.is_file():
+            raise HTTPException(404, "교안 페이지를 찾을 수 없습니다.")
+        return FileResponse(path, media_type="image/png", headers={
+            "X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store",
+        })
 
     @router.put("/courses/{course}/documents/{name}")
     async def upload_document(request: Request, course: str = PathParam(min_length=1, max_length=100),

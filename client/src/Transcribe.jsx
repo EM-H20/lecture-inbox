@@ -72,6 +72,7 @@ export default function Transcribe({ active }) {
   }, [active, reloadCourses]);
 
   const selected = courses.find((item) => item.name === course);
+  const unfinished = selected?.lectures.filter((item) => !item.hasNote).length || 0;
   const numbersOk = isLectureNumber(week) && isLectureNumber(session);
   const existing = numbersOk ? findLecture(selected, Number(week), Number(session)) : undefined;
   const uploading = progress !== null;
@@ -156,27 +157,23 @@ export default function Transcribe({ active }) {
 
     <section className="panel course-overview" aria-label="과목 선택">
       <div className="course-choice-area">
-        <span className="section-kicker">01 · 과목 선택</span>
-        <h2>어떤 과목을 공부할까요?</h2>
         <CoursePicker idPrefix="local" courses={courses} value={course} disabled={uploading || Boolean(pdfBatch)}
           onSelect={(name) => { setCourse(name); setForce(false); setViewer(null); setPdfResults([]); }}
           onCreated={async (name) => { await reloadCourses(name); setMessage({ kind: 'success', text: `'${name}' 강의를 만들었어요. 이제 교안이나 영상을 추가하세요.` }); }} />
       </div>
       <div className="course-summary">
-        <p>{selected?.lectures.length ? '전사가 끝났다면 회차를 골라 바로 정리하세요.' : '처음이라면 과목을 만들고, 가진 영상을 올려 주세요.'}</p>
-        {selected?.lectures.length > 0 ? <a className="text-button note-link" href="#study-lectures">정리할 회차로 이동 ↗</a> : null}
         <dl><div><dt>교안</dt><dd>{selected?.documents.length || 0}<span>개</span></dd></div><div><dt>전사된 강의</dt><dd>{selected?.lectures.length || 0}<span>개</span></dd></div><div><dt>완성된 노트</dt><dd>{selected?.lectures.filter((item) => item.hasNote).length || 0}<span>개</span></dd></div></dl>
+        <strong className="next-action-title">{!selected ? '먼저 과목 이름을 입력하세요' : !selected.lectures.length ? '영상을 올리면 시작할 수 있어요' : unfinished ? `${unfinished}개 강의를 노트로 만들 수 있어요` : '노트가 모두 준비됐어요'}</strong>
+        {selected ? <a className="next-action" href={selected.lectures.length ? '#study-lectures' : '#prepare-video'}>{!selected.lectures.length ? '영상 올리러 가기 →' : unfinished ? '정리할 강의 고르기 →' : '완성된 노트 보러 가기 →'}</a> : null}
       </div>
     </section>
 
     {selected ? <div className={`learning-workspace${selected.lectures.length ? ' has-lectures' : ''}`}>
-      <section className="panel preparation" aria-label="자료 준비">
-        <span className="section-kicker">02 · 자료 준비</span>
-        <h2>공부할 자료 담기</h2>
-        <p className="muted">영상은 글로 옮기고, 교안은 정리의 근거로 사용합니다.</p>
+      <details key={`preparation:${selected.name}`} className="panel preparation" open={!selected.lectures.length}>
+        <summary className="preparation-toggle">영상·교안 추가하기<span>새 강의를 올리거나 교안을 더할 때 열어 주세요.</span></summary>
         <div className="prepare-section">
           <div className="selection-heading"><h3>교안 추가</h3><span>선택 사항</span></div>
-          <p className="muted">PDF를 함께 올리면 표·그림·수식까지 참고합니다. 교안이 없어도 전사 내용으로 정리할 수 있어요.</p>
+          <p className="muted">PDF는 과목에 한 번 올리면 여러 주차에서 함께 씁니다. 선택한 강의의 전사 내용에 맞는 페이지를 찾아 참고합니다. 교안이 없어도 정리할 수 있어요.</p>
           <div className="pdf-state">
             <div className="pdf-head">
               {pdfBatch ? <span className="progress" role="status">
@@ -222,12 +219,12 @@ export default function Transcribe({ active }) {
               : <button className="primary" disabled={!canStart} onClick={start}>전사 시작</button>}
           </div>
         </div>
-      </section>
+      </details>
       <Study key={selected.name} course={selected} active={active} reloadCourses={reloadCourses} preparing={Boolean(pdfBatch)} />
     </div> : null}
 
     <section className="panel files">
-      <div className="files-header"><div><span className="eyebrow">작업 현황</span><h2>영상 전사 진행 상태 <span className="count">{jobs.length}</span></h2></div></div>
+      <div className="files-header"><h2>영상 전사 진행 상태 <span className="count">{jobs.length}</span></h2></div>
       {jobs.length === 0 ? <div className="empty"><h3>진행 중인 전사가 없어요</h3><p>새 영상을 전사하면 여기에 진행 상태가 표시됩니다. 완료된 회차는 위 정리 영역에서 선택하세요.</p></div>
         : <ul className="job-list">{jobs.map((job) => <li key={job.id}>
           <div className="file-details">

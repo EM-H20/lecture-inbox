@@ -1,0 +1,106 @@
+.note-reader { position: fixed; inset: 0; margin: 0; padding: 0; border: 0; width: 100vw; max-width: none; height: 100dvh; max-height: none; overflow: auto; background: var(--color-canvas); color: var(--color-ink); }
+.note-topbar { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 16px 32px; border-bottom: 1px solid var(--color-border); background: var(--color-surface); }
+.note-topbar > strong { font-size: 15px; overflow-wrap: anywhere; }
+.note-topbar > div { display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
+.note-topbar a { color: var(--color-accent); }
+.note-loading { max-width: 800px; margin: 48px auto; padding: 0 24px; }
+.note-layout { display: grid; grid-template-columns: 184px minmax(0, 800px); gap: 48px; max-width: 1160px; padding: 40px 32px 80px; margin: auto; align-items: start; }
+.note-nav { position: sticky; top: 24px; display: grid; gap: 6px; }
+.note-nav button { text-align: left; border: 0; border-left: 2px solid transparent; background: transparent; padding: 14px; font-size: 15px; min-height: 48px; }
+.note-nav button small { display: block; margin-top: 4px; font-size: 12px; color: var(--color-muted); }
+.note-nav button[aria-pressed="true"] { border-left-color: var(--color-accent); color: var(--color-accent); font-weight: 600; }
+.note-nav button:disabled { opacity: .55; background: transparent; }
+.note-nav p { border-top: 1px solid var(--color-border); margin: 20px 0 0; padding: 20px 14px; font-size: 13px; color: var(--color-muted); }
+.note-body { min-width: 0; }
+.note-intro { border-bottom: 1px solid var(--color-border); margin-bottom: 28px; padding-bottom: 28px; }
+.note-eyebrow { font-size: 13px; color: var(--color-accent); margin: 0 0 12px; }
+.note-intro h1 { margin: 0; font-size: 30px; line-height: 1.5; overflow-wrap: anywhere; }
+.note-mode-heading { font-size: 23px; margin: 0 0 16px; scroll-margin-top: 24px; }
+.note-help { font-size: 14px; color: var(--color-muted); line-height: 1.8; margin: 0 0 24px; }
+.note-markdown { font-size: 17px; line-height: 1.85; overflow-wrap: anywhere; }
+.note-markdown > :first-child { margin-top: 0; }
+.note-markdown h1 { font-size: 28px; margin: 32px 0 20px; }
+.note-markdown h2 { font-size: 24px; line-height: 1.5; margin: 36px 0 20px; letter-spacing: -.5px; }
+.note-markdown h3 { font-size: 20px; margin: 28px 0 14px; }
+.note-markdown h4 { font-size: 18px; margin: 24px 0 12px; }
+.note-markdown strong { font-weight: 650; }
+.note-markdown p { margin: 14px 0; }
+.note-markdown ul, .note-markdown ol { padding-left: 25px; }
+.note-markdown li { margin: 10px 0; }
+.note-markdown blockquote { margin: 24px 0; padding: 4px 20px; border-left: 2px solid var(--color-smoke); }
+.note-markdown a { color: var(--color-accent); text-decoration: underline; text-underline-offset: 4px; }
+.note-markdown pre { overflow: auto; padding: 20px; border: 1px solid var(--color-border); font-size: 14px; line-height: 1.7; }
+.note-markdown code { font-size: .9em; background: var(--color-rail); padding: 2px 5px; }
+.note-markdown pre code { padding: 0; }
+.note-markdown hr { border: 0; border-top: 1px solid var(--color-border); margin: 28px 0; }
+.note-markdown input[type="checkbox"] { display: inline; width: 16px; min-height: 16px; height: 16px; }
+.note-table { max-width: 100%; overflow-x: auto; margin: 24px 0; border-block: 1px solid var(--color-smoke); }
+.note-table table { width: 100%; border-collapse: collapse; font-size: 16px; }
+.note-table th, .note-table td { padding: 14px 18px; border-bottom: 1px solid var(--color-border); text-align: left; min-width: 100px; }
+.note-table th { font-weight: 600; font-size: 14px; color: var(--color-ink); }
+.note-table tr:last-child td { border-bottom: 0; }
+.note-figure { display: block; margin: 24px 0; }
+.note-figure img { display: block; width: 100%; max-height: 520px; object-fit: contain; border: 1px solid var(--color-border); }
+.note-caption { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-top: 8px; font-size: 13px; color: var(--color-muted); }
+.note-caption a { min-height: 44px; display: inline-flex; align-items: center; }
+.note-image-error { display: block; border: 1px dashed var(--color-smoke); padding: 20px; font-size: 14px; color: var(--color-muted); }
+.note-source { border-top: 1px solid var(--color-border); margin: 16px 0; font-size: 14px; }
+.note-source summary { padding: 10px 0; cursor: pointer; color: var(--color-accent); }
+.note-toc { display: flex; flex-wrap: wrap; gap: 8px 20px; padding-bottom: 24px; font-size: 14px; }
+.note-toc a { color: var(--color-accent); text-decoration: underline; text-underline-offset: 4px; }
+.note-chapter { border-bottom: 1px solid var(--color-border); padding: 22px 0; scroll-margin-top: 24px; }
+.note-uncertain { padding: 12px 0; margin-top: 24px; border-block: 1px solid var(--color-border); }
+.note-uncertain > summary { color: #805a20; }
+.note-uncertain summary { cursor: pointer; font-size: 15px; min-height: 32px; }
+.note-uncertain .note-markdown { font-size: 15px; }
+.note-next { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding-top: 24px; margin-top: 24px; }
+.note-next p { color: var(--color-muted); font-size: 14px; }
+.note-next button { flex-shrink: 0; }
+.note-question { padding: 28px 0; border-top: 1px solid var(--color-border); }
+.note-question h3 { font-size: 20px; line-height: 1.7; margin: 0 0 16px; }
+.note-question label { font-size: 13px; color: var(--color-muted); }
+.note-question textarea { width: 100%; min-height: 110px; padding: 14px; background: var(--color-surface); border: 1px solid var(--color-smoke); border-radius: var(--radius-input); color: var(--color-ink); font: inherit; font-size: 16px; resize: vertical; }
+.note-question textarea:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 4px; }
+.note-answer { margin-top: 16px; }
+.note-answer > summary { width: fit-content; min-height: 44px; padding: 10px 0; color: var(--color-accent); font-size: 14px; cursor: pointer; text-decoration: underline; text-underline-offset: 4px; }
+.note-answer > div { padding: 4px 20px; border-left: 2px solid var(--color-accent); margin-top: 16px; }
+.note-answer .text-button { color: var(--color-accent); font-size: 14px; }
+.note-markdown .katex-display { max-width: 100%; overflow-x: auto; overflow-y: hidden; padding: 8px 0; }
+.note-topbar > div { flex-wrap: wrap; }
+.note-editing .note-topbar { position: sticky; top: 0; z-index: 2; }
+.note-editor, .note-save-message { max-width: 920px; margin: 32px auto; padding: 0 32px; }
+.note-editor h1 { font-size: 28px; }
+.note-editor-fields { min-width: 0; margin: 0; padding: 0; border: 0; }
+.note-edit-tools, .note-edit-tools > div, .note-page-controls { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.note-edit-tools { margin: 24px 0; }
+.note-edit-tools [aria-pressed="true"] { color: var(--color-accent); border-color: var(--color-accent); }
+.note-edit-body { width: 100%; min-height: 60vh; padding: 20px; border: 1px solid var(--color-smoke); border-radius: var(--radius-input); background: var(--color-surface); color: var(--color-ink); font: inherit; font-size: 16px; line-height: 1.8; resize: vertical; }
+.note-edit-body:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+.note-edit-help { margin: 20px 0 40px; font-size: 14px; line-height: 1.8; color: var(--color-muted); }
+.note-edit-help summary { cursor: pointer; padding: 10px 0; color: var(--color-accent); }
+.note-edit-preview { padding: 28px 0; border-block: 1px solid var(--color-border); }
+.note-page-picker { padding: 24px 0; margin-bottom: 24px; border-block: 1px solid var(--color-border); }
+.note-page-picker h3 { margin-top: 0; font-size: 20px; }
+.note-page-controls { margin: 16px 0; }
+.note-page-controls > div:first-child { flex: 1; min-width: 0; }
+.note-page-picker label { display: block; font-size: 14px; }
+.note-page-picker select, .note-page-picker input { width: 100%; margin: 6px 0 12px; }
+.note-page-preview { border: 1px solid var(--color-border); }
+.note-page-preview img { display: block; width: 100%; height: 440px; object-fit: contain; }
+.note-page-original { display: inline-flex; align-items: center; min-height: 44px; color: var(--color-accent); font-size: 14px; }
+@media (max-width: 800px) {
+  .note-layout { display: block; padding: 24px 20px 48px; }
+  .note-nav { position: static; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 28px; }
+  .note-nav p { display: none; }
+  .note-nav button { padding: 12px; }
+  .note-intro h1 { font-size: 26px; }
+  .note-topbar { padding: 12px 16px; flex-wrap: wrap; gap: 8px; }
+  .note-topbar > div { width: 100%; justify-content: space-between; }
+  .note-next { flex-direction: column; align-items: stretch; }
+  .note-table th, .note-table td { padding: 12px; }
+  .note-editor, .note-save-message { padding: 0 20px; margin-top: 24px; }
+  .note-page-picker, .note-edit-preview { padding: 16px 0; }
+  .note-editing .note-topbar > div { justify-content: flex-start; gap: 8px; }
+  .note-editing .note-topbar a { width: 100%; }
+  .note-page-preview img { height: 280px; }
+}

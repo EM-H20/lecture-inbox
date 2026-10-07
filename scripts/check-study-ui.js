@@ -8,7 +8,7 @@ async (page) => {
   const saved = new Set(['week_04_01']);
   const agents = [
     { id: 'claude', label: 'Claude', available: true, login: 'claude auth login' },
-    { id: 'gemini', label: 'Gemini', available: false, login: 'gemini' },
+    { id: 'agy', label: 'Antigravity', available: false, login: 'agy' },
     { id: 'codex', label: 'Codex', available: true, login: 'codex login' },
   ];
   try {
@@ -54,10 +54,10 @@ async (page) => {
     check(await start.isDisabled(), 'No implicit selection');
     await section.getByRole('radio', { name: /Claude/ }).check();
     check(await start.isDisabled(), 'Agent alone must not start every lecture');
-    check(await section.getByRole('radio', { name: /Gemini/ }).isDisabled(), 'Missing CLI must be disabled');
+    check(await section.getByRole('radio', { name: /Antigravity/ }).isDisabled(), 'Missing CLI must be disabled');
     await section.getByRole('button', { name: '미정리 회차 전체 선택' }).click();
     check(await section.getByRole('checkbox', { checked: true }).count() === 3, 'Select all includes only unfinished notes');
-    check(await section.getByRole('checkbox', { name: '4주차 1번째 강의 선택' }).isDisabled(), 'Completed note must be protected');
+    check(!await section.getByRole('checkbox', { name: '4주차 1번째 강의 다시 정리 선택' }).isChecked(), 'Select all must not re-summarize finished notes');
     await section.getByRole('button', { name: '선택 해제', exact: true }).click();
     check(await section.getByRole('checkbox', { checked: true }).count() === 0, 'Clear selection failed');
     // Click card bodies, not programmatically injected checked state.
@@ -65,6 +65,8 @@ async (page) => {
     await section.getByRole('checkbox', { name: '3주차 1번째 강의 선택' }).focus();
     await p.keyboard.press('Space');
     check(await start.textContent() === '선택한 2개 정리하기', 'Selected count is unclear');
+    await section.getByRole('link', { name: '2개 선택했어요 · 에이전트 고르기 ↓' }).click();
+    check(await p.evaluate(() => location.hash === '#study-agent'), 'Next step must lead to the agent choice');
     for (const width of [1440, 1024, 768, 390]) {
       await p.setViewportSize({ width, height: 1000 });
       await p.locator('.course-overview').scrollIntoViewIfNeeded();
@@ -73,6 +75,8 @@ async (page) => {
       await p.evaluate(() => window.scrollTo(0, 0));
       await p.screenshot({ path: `/private/tmp/lecture-workflow-${width}.png`, fullPage: true });
     }
+    check(!await p.locator('#localWeek').isVisible(), 'Existing courses should keep optional upload controls folded');
+    await p.getByText('영상·교안 추가하기', { exact: false }).click();
     // The visible upload controls must actually open the native picker even in the narrow layout.
     await p.locator('#localWeek').fill('5');
     const pdfChooser = p.waitForEvent('filechooser');
@@ -90,7 +94,8 @@ async (page) => {
     fail = false;
     await start.click();
     await section.getByRole('button', { name: '정리 취소' }).waitFor();
-    check(submissions.length === 2 && submissions.every(body => body.agent === 'claude' && body.stems.join(',') === 'week_01_01,week_03_01'), 'Wrong provider, scope, or duplicate submission');
+    check(await section.getByRole('progressbar', { name: '노트 저장 진행률' }).isVisible(), 'Running job should show progress');
+    check(submissions.length === 2 && submissions.every(body => body.agent === 'claude' && body.stems.join(',') === 'week_01_01,week_03_01' && body.replace === false), 'Wrong provider, scope, or duplicate submission');
     check(await start.isDisabled(), 'Start must be disabled while running');
     await section.getByRole('button', { name: '정리 취소' }).click();
     await section.getByText('시험강의 · Claude · 취소됨').waitFor();
@@ -101,33 +106,58 @@ async (page) => {
     job = { ...job, status: 'done', completed: 2 };
     const viewNote = section.getByRole('button', { name: '1주차 1번째 강의 정리 노트 보기' });
     await viewNote.waitFor();
+    check(await section.getByRole('progressbar', { name: '노트 저장 진행률' }).count() === 0, 'Completed history should not look like active progress');
     check(await section.getByRole('checkbox', { name: '2주차 1번째 강의 선택' }).isEnabled(), 'Unselected lecture was incorrectly completed');
+    const reader = p.getByRole('dialog');
     await viewNote.click();
-    await section.getByRole('link', { name: /Markdown 저장/ }).waitFor();
-    check(await section.locator('.viewer script').count() === 0, 'Note HTML must remain inert');
+    await reader.getByRole('link', { name: /Markdown 저장/ }).waitFor();
+    check(await reader.locator('script').count() === 0, 'Note HTML must remain inert');
+    await reader.getByRole('button', { name: '닫기', exact: true }).click();
     await viewNote.click();
-    check(await section.getByRole('link', { name: /Markdown 저장/ }).isVisible(), 'Reopening same note cleared it');
+    await reader.getByRole('link', { name: /Markdown 저장/ }).waitFor();
+    await p.keyboard.press('Escape');
     await section.getByRole('button', { name: '2주차 1번째 강의 전사체 보기' }).click();
     await section.getByText('[00:00:00] 전사 내용 테스트', { exact: true }).waitFor();
     await section.getByRole('button', { name: '닫기', exact: true }).click();
     await viewNote.click();
+    await reader.getByRole('button', { name: '닫기', exact: true }).click();
     await p.locator('#localSelect').selectOption('다른강의');
+    check(await p.locator('.preparation').count() === 1, 'Course switching duplicated preparation controls');
     check(await section.getByRole('checkbox', { checked: true }).count() === 0, 'Selection leaked between courses');
     await viewNote.click();
-    await section.getByText('# 다른강의 노트', { exact: true }).waitFor();
+    await reader.locator('.note-intro h1').filter({ hasText: '다른강의 노트' }).waitFor();
     await p.waitForTimeout(700);
-    check(await section.getByText('# 다른강의 노트', { exact: true }).isVisible(), 'Stale note replaced selected course');
+    check(await reader.locator('.note-intro h1').textContent() === '다른강의 노트', 'Stale note replaced selected course');
+    await reader.getByRole('button', { name: '닫기', exact: true }).click();
     selectionSupported = false;
     await section.getByText(/회차 선택 기능을 반영하려면/).waitFor();
     await section.getByRole('checkbox', { name: '2주차 1번째 강의 선택' }).check();
     await section.getByRole('radio', { name: /Codex/ }).check();
     check(await start.isDisabled(), 'Old server must not ignore the selected scope');
     selectionSupported = true;
+    saved.add('week_02_01');
+    await p.getByRole('tab', { name: '학교 강의 받기' }).click();
+    await p.getByRole('tab', { name: '전사·시험 정리' }).click();
+    await section.getByRole('heading', { name: '시험 대비 노트', exact: true }).waitFor();
+    check(await start.count() === 0 && await section.getByRole('radio').count() === 0, 'Completed course should lead to reading, not another generation');
+    check(await section.getByRole('button', { name: /정리 노트 보기/ }).count() === 4, 'Completed course must keep every note accessible');
+    check(await section.getByRole('checkbox', { checked: true }).count() === 0, 'A lecture whose note appeared must not stay selected for re-summarizing');
+    await section.getByRole('checkbox', { name: '1주차 1번째 강의 다시 정리 선택' }).check();
+    await section.getByRole('radio', { name: /Codex/ }).check();
+    await section.getByText(/이전 노트는 output\/다른강의\/notes\/\.history에 보관됩니다/).waitFor();
+    await start.click();
+    check(submissions.at(-1).replace === true && submissions.at(-1).stems.join(',') === 'week_01_01', 'Re-summarizing must replace only the chosen note');
+    job = null;
     empty = true;
     await p.getByRole('tab', { name: '학교 강의 받기' }).click();
     await p.getByRole('tab', { name: '전사·시험 정리' }).click();
     await section.getByText('아직 전사된 강의가 없어요', { exact: true }).waitFor();
-    check(await start.isDisabled(), 'Empty course must not start');
+    check(await start.count() === 0 && await section.getByRole('radio').count() === 0, 'Empty course should guide transcription before offering generation');
+    check(await p.locator('.preparation').count() === 1, 'Only one preparation area should be rendered');
+    await p.locator('.preparation > summary').click();
+    check(!await p.locator('#localWeek').isVisible(), 'Preparation should be collapsible');
+    await section.getByRole('link', { name: '영상 전사하러 가기' }).click();
+    check(await p.locator('#localWeek').isVisible(), 'Transcription guidance must open a collapsed preparation area');
     await p.screenshot({ path: '/private/tmp/lecture-workflow-empty.png', fullPage: true });
     courseNames = [];
     await p.getByRole('tab', { name: '학교 강의 받기' }).click();
@@ -137,6 +167,6 @@ async (page) => {
     await p.getByRole('button', { name: '과목 만들기', exact: true }).click();
     await section.getByText('아직 전사된 강의가 없어요', { exact: true }).waitFor();
     check(await p.locator('#localSelect').inputValue() === '처음 만든 과목', 'First course creation did not select the course');
-    return { selectedScope: true, selectAllClear: true, existingNotesProtected: true, providerSelection: true, retry: true, cancel: true, staleNote: true, emptyGuidance: true, firstCourse: true, oldServerGuard: true, responsive: true, keyboard: true, visibleFilePickers: true };
+    return { selectedScope: true, selectAllClear: true, resummarize: true, completedCourseReading: true, providerSelection: true, retry: true, cancel: true, staleNote: true, emptyGuidance: true, firstCourse: true, oldServerGuard: true, responsive: true, keyboard: true, visibleFilePickers: true };
   } finally { await context.close(); }
 }

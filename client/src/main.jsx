@@ -46,7 +46,7 @@ function CourseBrowser({ api, token, disabled, onPrepare, onExpired }) {
   const course = courses.find((item) => item.id === courseId);
   const visibleCourses = courses.filter((item) => item.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
   return <div className="course-browser">
-    <div className="catalog-heading"><div><h3>1. 수강 과목 선택</h3><p>과목을 누르면 아래에 강의가 표시됩니다.</p></div><button className="text-button" disabled={loading} onClick={() => setReload((n) => n + 1)}>과목 새로고침</button></div>
+    <div className="catalog-heading"><div><h3>수강 과목</h3><p>과목을 누르면 아래에 강의가 표시됩니다.</p></div><button className="text-button" disabled={loading} onClick={() => setReload((n) => n + 1)}>과목 새로고침</button></div>
     <div className="course-filters">
       <div><label htmlFor="courseYear">연도</label><select id="courseYear" value={year} onChange={(event) => { setYear(event.target.value); setCourseId(''); }}>
         <option value="all">전체 연도</option>{YEARS.map((value) => <option key={value} value={value}>{value}년</option>)}
@@ -84,7 +84,7 @@ function LectureList({ course, api, token, disabled, onPrepare, onExpired }) {
   }, [course.id, token, reload]);
   const visible = lectures.filter((lecture) => lecture.title.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
   return <section className="lecture-section" aria-label={`${course.name} 강의`}>
-    <div className="catalog-heading"><div><h3>2. 받을 강의 선택</h3><p className="selected-course">{course.name}</p></div><button className="text-button" disabled={loading} onClick={() => setReload((n) => n + 1)}>강의 새로고침</button></div>
+    <div className="catalog-heading"><div><h3>받을 강의</h3><p className="selected-course">{course.name}</p></div><button className="text-button" disabled={loading} onClick={() => setReload((n) => n + 1)}>강의 새로고침</button></div>
     <label htmlFor="lectureSearch">강의 찾기</label><input id="lectureSearch" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="강의 제목이나 주차로 검색" />
     {loading ? <p className="catalog-message" role="status">강의 목록을 불러오는 중…</p> : error ? <p className="catalog-message" role="alert">{error}</p> : <>
       <p className="lecture-count" role="status">{visible.length}개 강의 · 영상 준비 후 내 다운로드에서 저장하세요.</p>
@@ -239,7 +239,6 @@ function App() {
     <a className="skip-link" href={tab === 'local' ? '#local-workspace' : '#workspace'}>본문으로 건너뛰기</a>
     <aside className="app-rail">
       <a className="brand" href="/" aria-label="강의 서랍 홈"><span className="brand-icon"><Icon /></span><span>강의 서랍<small>나만의 학습 공간</small></span></a>
-      <div className="rail-label">WORKSPACE</div>
       <div className="tabs" role="tablist" aria-label="작업 선택" aria-orientation="vertical"
         onKeyDown={(event) => {
           if (!['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
@@ -251,23 +250,19 @@ function App() {
         <button id="tab-school" className="tab" role="tab" aria-label="학교 강의 받기" aria-controls="workspace" tabIndex={tab === 'school' ? 0 : -1} aria-selected={tab === 'school'} onClick={() => chooseTab('school')}><Icon name="download" /><span>학교 강의 받기<small>집현캠퍼스에서 가져오기</small></span></button>
         <button id="tab-local" className="tab" role="tab" aria-label="전사·시험 정리" aria-controls="local-workspace" tabIndex={tab === 'local' ? 0 : -1} aria-selected={tab === 'local'} onClick={() => chooseTab('local')}><Icon name="folder" /><span>전사·시험 정리<small>내 자료로 공부하기</small></span></button>
       </div>
-      <div className="rail-note"><span>강의는 차곡차곡.<br />공부는 나의 속도로.</span><p>영상에서 놓친 설명을 찾고,<br />필요한 회차만 노트로 남기세요.</p></div>
       <div className="rail-bottom"><span className="connection"><i className={health?.ok ? 'online' : ''} />{health === null ? '서버 연결 중' : health.ok ? '서버 연결됨' : '서버 연결 확인 필요'}</span><small>자료는 이 컴퓨터에 보관됩니다.</small></div>
     </aside>
     <main>
       <header className="page-heading">
-        <p className="breadcrumb">내 학습 공간 <span>/</span> {tab === 'local' ? '전사·시험 정리' : '학교 강의 받기'}</p>
-        <div className="page-title"><div><h1>{tab === 'local' ? '배운 내용을, 나의 것으로.' : '공부의 시작, 강의 모으기.'}</h1><p>{tab === 'local' ? '교안과 강의 속 설명을 연결해, 나만의 시험 대비 노트를 만드세요.' : '집현캠퍼스의 강의를 가져와 원하는 시간에 다시 살펴보세요.'}</p></div>
+        <div className="page-title"><div><h1>{tab === 'local' ? '전사·시험 정리' : '학교 강의 내려받기'}</h1><p>{tab === 'local' ? '전사된 강의로 노트를 만들거나, 새 영상과 교안을 추가하세요.' : '학교에 로그인한 뒤 내려받을 강의를 선택하세요.'}</p></div>
           <span className="page-context">{tab === 'local' ? '학교 로그인 없이 이용 가능' : '세종대학교 집현캠퍼스'}</span></div>
       </header>
-      <ol className="workflow" aria-label={tab === 'local' ? '시험 준비 순서' : '강의 다운로드 순서'}><li><span>01</span>{tab === 'local' ? '과목 고르기' : '학교 계정 연결'}</li><li><span>02</span>{tab === 'local' ? '자료 준비하기' : '필요한 강의 선택'}</li><li><span>03</span>{tab === 'local' ? '선택한 회차 정리하기' : '다운로드 후 전사하기'}</li></ol>
       {error || pollError ? <div className="message error" role="alert">{error || pollError}</div> : null}
       {notice ? <div className="message success" role="status">{notice}</div> : null}
       {health?.ok && !health.ffmpeg ? <div className="message error" role="alert">서버에 ffmpeg가 설치되어 있지 않습니다. 운영자 설정이 필요합니다.</div> : null}
       <div id="local-workspace" role="tabpanel" aria-labelledby="tab-local" hidden={tab !== 'local'}><Transcribe active={tab === 'local'} /></div>
       <div className="workspace" id="workspace" role="tabpanel" aria-labelledby="tab-school" hidden={tab !== 'school'}>
         <aside className="panel account">
-          <div className="step"><span>01 · 학교 연결</span><Icon name="folder" /></div>
           <h2>{token ? '연결되었습니다' : '학교 계정으로 시작'}</h2>
           <p className="muted">세종대학교 집현캠퍼스 계정을 사용합니다.</p>
           {token ? <div className="connected-card"><div className="check">✓</div><strong>강의를 가져올 준비가 됐어요</strong><p>본인 계정으로 접근할 수 있는 강의만 받을 수 있습니다.</p><button className="secondary" disabled={Boolean(busy)} onClick={() => action('logout', async () => { await api('/api/logout', { method: 'POST', body: '{}' }); forget(); })}>로그아웃</button></div> :
@@ -279,7 +274,7 @@ function App() {
           <div className="privacy"><span>개인정보 안내</span><p>로그인을 위해 학번과 비밀번호를 이 서비스의 서버를 통해 학교에 전달합니다. 비밀번호는 저장하지 않으며, 학교 세션은 만료 또는 로그아웃 시 삭제합니다.</p></div>
         </aside>
         <div className="main-column">
-          <section className="panel download-form"><div className="step"><span>02 · 강의 선택</span><Icon name="video" /></div><h2>어떤 강의를 보관할까요?</h2>
+          <section className="panel download-form"><h2>강의 선택</h2>
             {token ? <CourseBrowser key={token} api={api} token={token} disabled={Boolean(busy) || preparing || !health?.ffmpeg} onPrepare={prepare} onExpired={() => { forget(); setError('로그인이 만료되었습니다. 다시 로그인해 주세요.'); }} /> : <p className="hint">로그인하면 수강 과목과 강의 목록을 불러옵니다.</p>}
             <details className="manual-url"><summary>강의 주소로 직접 추가</summary>
             <form onSubmit={submit}>
@@ -290,7 +285,7 @@ function App() {
             </form>
             </details>
           </section>
-          <section className="panel files"><div className="files-header"><div><span className="eyebrow">03 · 내 다운로드</span><h2>내 다운로드 <span className="count">{jobs.length}</span></h2></div><Icon name="download" /></div>
+          <section className="panel files"><div className="files-header"><h2>내 다운로드 <span className="count">{jobs.length}</span></h2><Icon name="download" /></div>
             {jobs.length === 0 ? <div className="empty"><div className="empty-icon"><Icon name="folder" /></div><h3>아직 담긴 강의가 없어요</h3><p>위에서 강의를 선택하면 여기에 표시됩니다.</p></div> : <ul className="job-list">{jobs.map((job) => <li key={job.id}>
               <span className="file-icon"><Icon name="video" /></span><div className="file-details"><strong>{job.name}</strong><span className={`status ${job.status}`}>{LABELS[job.status]}{job.size > 0 ? ` · ${(job.size / 1024**2).toFixed(1)} MB` : ''}</span>{job.error ? <p className="job-error">{job.error}</p> : null}{job.status === 'ready' && job.expiresAt ? <small>{new Date(job.expiresAt * 1000).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}까지 받을 수 있어요</small> : null}</div>
               <div className="job-actions">{job.status === 'ready' ? <button className="download-button" disabled={Boolean(busy)} onClick={() => download(job)}><Icon name="download" />다운로드</button> : null}<button className="text-button" disabled={Boolean(busy)} onClick={() => action('delete', async () => { await api(`/api/jobs/${job.id}`, { method: 'DELETE' }); setRefresh((n) => n + 1); })}>{job.status === 'waiting' || job.status === 'downloading' ? '취소' : '목록에서 정리'}</button>{job.status === 'ready' ? <button className="text-button" onClick={() => setTranscribeJob(transcribeJob === job.id ? '' : job.id)}>전사하기</button> : null}</div>

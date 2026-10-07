@@ -20,7 +20,9 @@ def build_work_order(root: Path, course: str) -> str:
     if not documents:
         lines.append(f"- 교안 없음: `{rel(documents_dir(root, course))}/`에 PDF를 넣고 `{prepare}`를 실행하면 페이지가 준비됩니다. 교안이 없으면 전사체만으로 정리하세요.")
     else:
-        lines.append(f"- 교안 {len(documents)}개. 파일 이름(예: 주차)과 전사 내용을 보고 어느 교안이 어느 회차인지 판단하세요.")
+        lines.append(f"- 교안 {len(documents)}개. 모든 회차가 함께 참조하는 과목 공용 자료입니다.")
+        lines.append("- 한 PDF를 여러 주차에서 사용하거나 같은 페이지를 반복해서 다룰 수 있습니다. 한 회차가 여러 PDF를 참조해도 됩니다.")
+        lines.append("- 정리 범위는 각 회차의 전사 내용입니다. 파일 이름·주차 번호로 일대일 연결하지 말고 실제 설명과 일치하는 쪽을 찾아 문서·쪽수를 남기세요.")
         lines.append("- 교안 내용은 해당 쪽 이미지를 직접 열어 확인하세요(표·수식·그림 속 글자는 텍스트로 제대로 안 나옵니다). 텍스트는 찾기 위한 참고용입니다.")
         for document in documents:
             folder = pages_dir(root, course, document)
