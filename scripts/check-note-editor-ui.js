@@ -30,6 +30,7 @@ async (page) => {
       return route.fulfill({json:{ok:true,ffmpeg:true,whisper:true,jobs:[]}});
     });
     await p.goto('http://127.0.0.1:4317');
+    const appUrl = p.url();
     await p.getByRole('tab',{name:'전사·시험 정리'}).click();
     const open=()=>p.getByRole('button',{name:'1주차 1번째 강의 정리 노트 보기'}).click();
     await open();
@@ -102,8 +103,19 @@ async (page) => {
       await reader.evaluate(node=>node.scrollTop=0);
       await p.screenshot({path:`/private/tmp/note-editor-${width}.png`});
     }
+    // Browser Back with unsaved edits asks first; declining keeps the editor, accepting closes the reader.
+    await body.fill((await body.inputValue())+'\n뒤로가기 시험');
+    p.once('dialog',dialog=>dialog.dismiss());
+    await p.goBack();
+    await p.waitForTimeout(200);
+    check(await reader.isVisible() && await body.isVisible(),'Declining discard on Back closed the reader');
+    check(p.url()===appUrl,'Back left the app');
+    p.once('dialog',dialog=>dialog.accept());
+    await p.goBack();
+    await reader.waitFor({state:'hidden'});
+    check(p.url()===appUrl,'Back left the app after discard');
     check(errors.length===0,errors.join('\n'));
-    return {editing:true,pageSelection:true,insertion:true,preview:true,saveRetry:true,conflictPreservesDraft:true,discardGuard:true,keyboard:true,responsive:true};
+    return {browserBack:true,editing:true,pageSelection:true,insertion:true,preview:true,saveRetry:true,conflictPreservesDraft:true,discardGuard:true,keyboard:true,responsive:true};
   } catch (error) {
     console.error(errors, await p.locator('dialog').innerText());
     await p.screenshot({path:'/private/tmp/note-editor-failure.png'});

@@ -226,7 +226,26 @@ export default function NoteReader({ course, stem, onClose }) {
       savePending.current = false; setSaving(false);
     }
   }
-  function close() { if (mayLeave()) onClose(); }
+  // Browser Back closes the reader like 닫기. ponytail: if the reader unmounts without Back/닫기 (e.g. a tab switch) one
+  // stale history entry stays; a later Back just stays on the page. Handle it only if that proves annoying.
+  const latest = useRef(null);
+  const confirmed = useRef(false);
+  latest.current = { mayLeave, onClose };
+  useEffect(() => {
+    if (!window.history.state?.noteReader) window.history.pushState({ noteReader: true }, '');  // StrictMode runs this twice
+    const onBack = () => {
+      const ok = confirmed.current || latest.current.mayLeave();
+      confirmed.current = false;
+      if (ok) latest.current.onClose();
+      else window.history.pushState({ noteReader: true }, '');  // user chose to stay
+    };
+    window.addEventListener('popstate', onBack);
+    return () => window.removeEventListener('popstate', onBack);
+  }, []);
+  function close() {
+    if (!mayLeave()) return;
+    if (window.history.state?.noteReader) { confirmed.current = true; window.history.back(); } else onClose();
+  }
   return createPortal(<dialog className={`note-reader${editing ? ' note-editing' : ''}`} ref={dialog} aria-labelledby="reader-title" onCancel={(event) => { event.preventDefault(); close(); }}>
     <div className="note-topbar"><strong id="reader-title">{course} · {lectureLabel(Number(stem.slice(5, 7)), Number(stem.slice(8, 10)))}</strong>
       <div>{document ? <a className="text-button" download={`${course}_${stem}${editing ? '_수정본' : ''}.md`} href={`data:text/markdown;charset=utf-8,${encodeURIComponent(editing ? draft : document.text)}`}>{editing ? '수정본 내려받기 ↓' : 'Markdown 저장 ↓'}</a> : null}

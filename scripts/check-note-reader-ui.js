@@ -79,6 +79,7 @@ $$
       return route.fulfill({json:{ok:true,ffmpeg:true,whisper:true,jobs:[]}});
     });
     await p.goto('http://127.0.0.1:4317');
+    const appUrl = p.url();
     await p.getByRole('tab',{name:'전사·시험 정리'}).click();
     const opener=p.getByRole('button',{name:'1주차 1번째 강의 정리 노트 보기'});
     await opener.click();
@@ -127,9 +128,21 @@ $$
     check(await reader.getByLabel('내가 기억한 답').inputValue()==='90도에서95도','Draft lost across mode switch');
     check(await reader.locator('.note-answer[open]').count()===0,'Answer not hidden on return');
     await p.keyboard.press('Escape');
-    check(!await reader.isVisible(),'Escape did not close');
+    await reader.waitFor({state:'hidden'});
+    await p.waitForFunction(()=>document.activeElement?.textContent?.includes('정리 노트 보기') || document.activeElement?.getAttribute('aria-label')?.includes('정리 노트 보기'));
     check(await opener.evaluate(node=>node===document.activeElement),'Focus not returned to opener');
+    // Browser Back must close the reader exactly like 닫기, and 닫기 must not leave a stale history entry.
+    await opener.click(); await reader.waitFor();
+    await p.goBack();
+    await reader.waitFor({state:'hidden'});
+    check(p.url()===appUrl,'Back left the app instead of closing the reader');
+    check(await opener.evaluate(node=>node===document.activeElement),'Focus not returned after Back');
+    await opener.click(); await reader.waitFor();
+    await reader.getByRole('button',{name:'닫기',exact:true}).click();
+    await reader.waitFor({state:'hidden'});
+    check(await p.evaluate(()=>history.state?.noteReader!==true),'Close button left a stale history entry');
+    check(p.url()===appUrl,'Close button changed the address');
     check(errors.length===0,errors.join('\n'));
-    return {summary:true,markdownTables:true,math:true,safeImages:true,imageFailure:true,sourceDisclosure:true,emphasis:true,emphasisToggle:true,quiz:true,keyboard:true,focusReturn:true,retry:true,responsive:true};
+    return {summary:true,markdownTables:true,math:true,safeImages:true,imageFailure:true,sourceDisclosure:true,emphasis:true,emphasisToggle:true,quiz:true,keyboard:true,focusReturn:true,browserBack:true,retry:true,responsive:true};
   } finally { await context.close(); }
 }
