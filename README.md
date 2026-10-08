@@ -236,6 +236,90 @@ npm run lecture -- transcribe ~/Downloads/강의.mp4 --course 자료구조 --wee
 
 정리는 한 번에 한 작업만 실행하고 에이전트 실행 한 번의 제한 시간은 30분입니다. 어느 에이전트든 같은 형식이 되도록 서버가 노트를 `정리-지침.md`의 ‘형식 검사’로 확인합니다. 통과하지 못하면 이유를 알려 주고 한 번 다시 쓰게 하며, 그래도 실패하면 저장하지 않습니다. 기존 노트는 덮어쓰지 않습니다. 실패·취소 시 이미 완성된 회차는 남고, 미완성 회차는 저장하지 않아 다시 시작할 수 있습니다. 서버를 종료하면 진행 중인 에이전트와 하위 프로세스도 종료됩니다. 작업 상태는 메모리에만 남지만 완성 노트는 재시작 후에도 표시됩니다. 내려받은 Markdown의 교안 이미지 상대경로는 프로젝트의 원래 `notes/` 위치를 기준으로 합니다.
 
+## 동작 원리
+
+브라우저 화면(React, 4317)은 모든 요청을 로컬 API(FastAPI, 4318)로 보내고, 학교 사이트·ffmpeg·Whisper·AI 에이전트 CLI는 로컬 API만 호출합니다. 학교 강의 받기 흐름은 [`docs/school-download-flow.html`](docs/school-download-flow.html)을 브라우저로 열면 다이어그램으로 볼 수 있습니다.
+
+```mermaid
+sequenceDiagram
+    participant B as 브라우저
+    participant A as 로컬 API
+    participant S as 학교 이캠퍼스
+    participant F as ffmpeg
+    participant C as 영상 CDN
+    B->>A: POST /api/login (학번·비밀번호)
+    A->>S: POST /login/index.php
+    S-->>A: 쿠키 + logout.php 링크
+    A-->>B: Bearer 토큰
+    B->>A: GET /api/courses, /api/courses/{id}/lectures
+    A->>S: 쿠키로 목록 페이지 요청
+    S-->>A: HTML (파싱)
+    B->>A: POST /api/jobs (viewer.php 주소)
+    A->>S: GET /mod/vod/viewer.php?id=
+    S-->>A: 플레이어 설정의 m3u8 주소
+    A->>F: ffmpeg -i m3u8 -c copy
+    F->>C: HLS 조각 요청 (403이면 Referer 붙여 재시도)
+    F-->>A: video.mp4
+    B->>A: POST /api/jobs/{id}/ticket
+    A-->>B: 60초 1회용 링크
+    B->>A: GET /api/download/{ticket}
+    A-->>B: Content-Disposition: attachment
+```
+
+### 1. 로그인 (`server/school.py`, `server/app.py`)
+
+1. 화면이 `POST /api/login`으로 학번·비밀번호를 보냅니다. 서버는 먼저 시도 횟수를 제한합니다(15분 동안 IP당 20회, 학번당 5회. 학번은 해시로만 셉니다).
+2. 사용자마다 새 `SchoolSession`(쿠키 저장소)을 만들고, 학교 로그인 폼(`/login/index.php`, `ssoGubun=Login`, `type=popup_login`)에 학번·비밀번호를 POST합니다. 리다이렉트가 `https://ecampus.sejong.ac.kr` 밖으로 나가면 로그인 정보를 넘기지 않고 중단합니다.
+3. 최종 주소가 로그인 페이지가 아니고 응답 HTML에 `logout.php` 링크가 있으면 성공으로 판정합니다.
+4. 서버가 임의 토큰을 만들어 `{학교 쿠키 세션, 만료 시각(2시간)}`을 메모리에 묶어 두고 토큰만 돌려줍니다. 화면은 토큰을 탭의 `sessionStorage`에 두고 이후 요청에 `Authorization: Bearer`로 붙입니다. 비밀번호는 이 요청에서만 쓰고 어디에도 저장하지 않습니다.
+
+### 2. 과목·강의 목록
+
+- `GET /api/courses?year=&semester=` → 학교 쿠키로 `/local/ubion/user/index.php`를 읽고 `a.coursefullname` 링크(`/course/view.php?id=숫자`)와 같은 행의 연도·학기 칸을 뽑습니다.
+- `GET /api/courses/{id}/lectures` → `/course/view.php?id=`에서 `li.activity.vod`(id `module-숫자`) 항목의 강의 이름을 뽑아 `viewer.php?id=숫자` 주소를 만듭니다.
+- 학교가 로그인 페이지로 돌려보내거나 `logout.php` 링크가 없으면 "학교 로그인 만료"(409)로 빈 목록과 구분해 알립니다. 학교 응답을 기다리는 동안 로그아웃했다면 응답을 버립니다.
+
+### 3. 영상 받아 오기
+
+1. **영상 준비**를 누르면 `POST /api/jobs`가 `viewer.php?id=숫자` 주소를 검증하고 작업을 큐에 넣은 뒤 바로 202를 돌려줍니다. 사용자당 진행 중 1개·보관 3개, 서버 전체 12개까지이고 디스크 여유도 확인합니다. 화면은 3초마다 `GET /api/jobs`로 상태를 확인합니다.
+2. 백그라운드 스레드가 학교 쿠키로 `/mod/vod/viewer.php?id=`를 열고, `<video data-setup-lazy='{"sources":{"src":"…m3u8"}}'>`에서 HLS 재생 목록 주소를 꺼냅니다. 없으면 HTML에서 `https://…index.m3u8` 패턴을 찾습니다.
+3. 그 주소가 HTTPS이고, DNS로 확인한 IP가 모두 공인 주소일 때만 진행합니다(내부망 주소 차단).
+4. `ffmpeg -i <m3u8> -c copy -f mp4`로 HLS 조각을 **재인코딩 없이** 하나의 MP4로 합칩니다. ffmpeg에는 학교 쿠키를 넘기지 않으며, TLS 인증서 검증을 켜고 `https,tls,tcp,crypto` 프로토콜만 허용합니다. 최대 2GB·2시간이고, CDN이 403을 주면 `Referer: https://ecampus.sejong.ac.kr/`를 붙여 한 번 더 시도합니다.
+5. `video.part`가 정상 크기면 `video.mp4`로 바꾸고 상태를 `ready`로 바꿉니다. 파일은 30분 보관합니다. ffmpeg 오류 출력에는 서명된 주소가 있을 수 있어 화면·로그로 내보내지 않습니다.
+
+### 4. 브라우저로 내려받기
+
+1. **다운로드**를 누르면 `POST /api/jobs/{id}/ticket`이 본인 작업인지 확인한 뒤 60초짜리 1회용 경로 `/api/download/{ticket}`을 줍니다.
+2. 화면이 그 경로로 링크를 눌러 내려받습니다. 브라우저 다운로드에는 `Authorization` 헤더를 붙일 수 없어서 토큰 대신 1회용 티켓을 씁니다. 티켓은 한 번 쓰면 사라지고, 로그인이 만료됐으면 거부합니다.
+3. 서버는 `Content-Disposition: attachment`로 파일을 보냅니다. 전송 중에는 파일을 지우지 않고, 전송이 끝나거나 끊긴 뒤 만료·삭제된 작업이면 정리합니다.
+
+### 5. 전사 (`server/lecture/`)
+
+```mermaid
+flowchart LR
+    U[영상 업로드<br/>PUT /api/local/transcriptions] --> W
+    J[받은 학교 영상<br/>POST /transcriptions/from-job] --> W
+    W[ffmpeg<br/>16kHz 모노 WAV] --> X[whisper-cli<br/>--vad -l ko]
+    X --> R{반복 구간?}
+    R -- 예 --> RT[그 구간만 다시 디코딩<br/>실패 시 표시만]
+    RT --> T
+    R -- 아니오 --> T[sources/과목/전사/<br/>week_XX_YY.md]
+    T --> P[교안 PDF → pages/<br/>정리-작업.md 갱신]
+```
+
+- 업로드는 받기 전에 같은 회차 전사가 이미 있는지 먼저 확인합니다(덮어쓰기 체크가 없으면 거부). 학교 탭에서 받은 영상은 서버 임시 파일을 그대로 쓰고, 전사가 끝날 때까지 지우지 않습니다.
+- 소리를 16kHz 모노 WAV로 바꾸되 무음은 자르지 않아 타임스탬프가 원본 영상과 맞습니다. Whisper가 같은 문장을 되풀이하는 구간을 찾으면 그 부분만 잘라 다시 디코딩하고(그래도 반복되면 디코딩 설정을 바꿔 한 번 더), 끝내 안 되면 그 구간을 표시만 해 둡니다.
+- 저장 후 교안 PDF를 쪽별 이미지·텍스트로 만들고 `output/과목/정리-작업.md`를 갱신합니다. 업로드한 영상은 전사 후 지웁니다.
+
+### 6. 시험 대비 노트 생성
+
+1. **선택한 N개 정리하기** → `POST /api/local/courses/{과목}/study`. 한 번에 한 작업만 실행하며 고른 회차를 순서대로 처리합니다.
+2. 회차마다 지시문을 만들어 선택한 CLI를 읽기 전용으로 실행합니다(`claude --print`, `agy --mode plan --sandbox --print`, `codex exec --sandbox read-only`). 에이전트가 교안·전사를 읽고 임시 폴더에 노트를 씁니다.
+3. 서버가 `정리-지침.md`의 형식 검사로 노트를 확인합니다. 실패하면 이유를 지시문에 넣어 한 번 다시 쓰게 하고, 그래도 실패하면 저장하지 않습니다.
+4. 통과한 노트는 `output/과목/notes/week_XX_YY.md`로 원자적으로 게시합니다. 다시 만들기를 고르면 기존 노트를 `notes/.history/`로 옮겨 보관합니다.
+
+`/api/local/*` 경로는 `Host`가 로컬 주소인 요청만 받고, 쓰기 요청(POST·PUT·DELETE)에는 화면이 붙이는 확인 헤더가 있어야 합니다.
+
 ## 세션·보관 동작
 
 - 애플리케이션 세션은 기본 2시간, 준비된 파일은 기본 30분 유지됩니다. 학교 세션이 더 먼저 만료될 수 있습니다.
