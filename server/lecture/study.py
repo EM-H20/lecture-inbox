@@ -80,6 +80,16 @@ def note_problems(text, course, root, transcript=None):
     if names[:1] != ["핵심 암기사항"] or names[-2:] != ["예상문제와 해설", "불확실한 내용"] or not concepts \
             or any(not name.startswith(f"{n}. ") for n, name in enumerate(concepts, 1)):
         problems.append("## 제목은 핵심 암기사항 → 1. … 2. …(번호순 개념) → 예상문제와 해설 → 불확실한 내용 순서여야 합니다.")
+    emphasis = [n for n, (_, name) in enumerate(h2) if name == "교수님 강조"]
+    if emphasis:
+        start = h2[emphasis[0]][0] + 1
+        end = h2[emphasis[0] + 1][0] if emphasis[0] + 1 < len(h2) else len(lines)
+        for line in (l for l in lines[start:end] if l.startswith("- ")):
+            if not re.search(r"\[\d{2}:[0-5]\d:[0-5]\d\]", line):
+                problems.append(f"'교수님 강조' 항목에는 전사 시각 [HH:MM:SS]가 있어야 합니다: {line[2:40]}")
+            for ref in re.findall(r"\(개념\s*([\d,\s]+)\)", line):
+                if any(not 1 <= int(number) <= len(concepts) for number in re.findall(r"\d+", ref)):
+                    problems.append(f"'교수님 강조' 항목이 없는 개념 번호를 가리킵니다 (개념 {ref.strip()}): {line[2:40]}")
     practice = [n for n, (_, name) in enumerate(h2) if name == "예상문제와 해설"]
     if practice:
         start = h2[practice[0]][0]

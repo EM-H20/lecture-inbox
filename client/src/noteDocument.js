@@ -6,6 +6,40 @@ import remarkMath from 'remark-math';
 const parser = unified().use(remarkParse).use(remarkGfm).use(remarkMath);
 const plain = (node) => node.value ?? (node.children || []).map(plain).join('');
 
+const STAMP = /\[(\d{2}:[0-5]\d:[0-5]\d)\]/g;
+
+// "교수님 강조" is bold-labelled bullet groups. Each bullet cites transcript times and may point at note concepts: "(개념 2, 3)".
+const CONCEPT_REF = /\s*\(개념\s*([\d,\s]+)\)/g;
+
+function emphasisGroups(nodes) {
+  const plainText = (node) => plain(node).trim();
+  const groups = [];
+  for (const node of nodes) {
+    if (node.type === 'paragraph' && node.children.length === 1 && node.children[0].type === 'strong') {
+      groups.push({ label: plainText(node), items: [] });
+    } else if (node.type === 'list') {
+      if (!groups.length) groups.push({ label: '', items: [] });
+      for (const item of node.children) {
+        const line = item.children[0] ? plainText(item.children[0]) : '';
+        groups.at(-1).items.push({
+          headline: line.replace(CONCEPT_REF, ''),
+          concepts: [...new Set([...line.matchAll(CONCEPT_REF)].flatMap((m) => m[1].match(/\d+/g).map(Number)))],
+          stamps: [...new Set([...line.matchAll(STAMP)].map((m) => m[1]))],
+        });
+      }
+    }
+  }
+  return groups;
+}
+
+// The cited transcript line with a little context, so the reader sees what was actually said.
+export function transcriptWindow(text, stamp, before = 1, after = 4) {
+  const lines = text.split('\n').map((line) => line.match(/^\[(\d{2}:[0-5]\d:[0-5]\d)\]\s*(.*)$/)).filter(Boolean)
+    .map((m) => ({ stamp: m[1], text: m[2] }));
+  const at = lines.findIndex((line) => line.stamp === stamp);
+  return at < 0 ? [] : lines.slice(Math.max(0, at - before), at + after + 1).map((line) => ({ ...line, hit: line.stamp === stamp }));
+}
+
 // Use Markdown's syntax tree: headings inside code fences must never create sections.
 export function parseNote(text) {
   const tree = parser.parse(text);
@@ -20,8 +54,9 @@ export function parseNote(text) {
       : title === '교수님 강조' ? 'emphasis'
         : /^(예상문제와 해설|연습문제)$/.test(title) ? 'practice'
         : /^(불확실한 내용|확인 필요한 내용)$/.test(title) ? 'uncertain' : 'concept';
-    return { id: `note-section-${index}`, title, kind, text: text.slice(start, end),
-      nodes: tree.children.filter((node) => node.position.start.offset > start && node.position.start.offset < end) };
+    const nodes = tree.children.filter((node) => node.position.start.offset > start && node.position.start.offset < end);
+    return { id: `note-section-${index}`, title, kind, text: text.slice(start, end), nodes,
+      ...(kind === 'emphasis' ? { groups: emphasisGroups(nodes) } : {}) };
   });
   const practice = sections.filter((section) => section.kind === 'practice');
   const questions = [];

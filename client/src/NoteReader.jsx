@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -6,7 +6,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import { lectureLabel, localFetch } from './localApi.js';
-import { noteLinkUrl, pageImageUrl, parseNote } from './noteDocument.js';
+import { noteLinkUrl, pageImageUrl, parseNote, transcriptWindow } from './noteDocument.js';
 import NoteEditor from './NoteEditor.jsx';
 import './note-reader.css';
 
@@ -58,7 +58,49 @@ function NoteMarkdown({ text, course, definitions = '' }) {
   </Markdown></div>;
 }
 
-function ReadingContent({ document, course }) {
+function TranscriptExcerpt({ stamps, load }) {
+  const [state, setState] = useState({ status: 'loading' });
+  useEffect(() => {
+    let stopped = false;
+    load().then((text) => !stopped && setState({ status: 'ready', text }))
+      .catch((failure) => !stopped && setState({ status: 'error', message: failure.message }));
+    return () => { stopped = true; };
+  }, [load]);
+  if (state.status === 'loading') return <p className="note-help" role="status">전사 원문을 불러오는 중…</p>;
+  if (state.status === 'error') return <p className="message error" role="alert">전사 원문을 불러오지 못했습니다. {state.message}</p>;
+  return stamps.map((stamp) => {
+    const lines = transcriptWindow(state.text, stamp);
+    return <blockquote className="note-transcript" key={stamp}>
+      {lines.length ? lines.map((line) => <p key={line.stamp} className={line.hit ? 'note-hit' : ''}><time>[{line.stamp}]</time> {line.text}</p>)
+        : <p>[{stamp}] 시각의 발언을 전사체에서 찾지 못했습니다.</p>}
+    </blockquote>;
+  });
+}
+
+function EmphasisItem({ item, concepts, markdown, load }) {
+  const [opened, setOpened] = useState(false);
+  const linked = item.concepts.map((number) => ({ number, section: concepts.find((section) => parseInt(section.title, 10) === number) }));
+  return <li><details className="note-emphasis-item" onToggle={(event) => event.currentTarget.open && setOpened(true)}>
+    <summary>{item.headline}</summary>
+    <div>
+      {linked.length ? <div><h4>정리된 강의 내용</h4>
+        {linked.map(({ number, section }) => section ? <div className="note-emphasis-concept" key={number}>{markdown(section.text)}</div>
+          : <p className="note-help" key={number}>개념 {number}을 노트에서 찾지 못했습니다. 전체 읽기에서 확인해 주세요.</p>)}</div> : null}
+      {item.stamps.length ? <div><h4>전사 원문</h4>{opened ? <TranscriptExcerpt stamps={item.stamps} load={load} /> : null}</div> : null}
+    </div>
+  </details></li>;
+}
+
+function EmphasisSection({ section, concepts, markdown, load }) {
+  const groups = section.groups.filter((group) => group.items.length);
+  if (!groups.length) return markdown(section.text);
+  return groups.map((group, index) => <div className="note-emphasis" key={index}>
+    {group.label ? <h3>{group.label}</h3> : null}
+    <ul>{group.items.map((item, position) => <EmphasisItem key={position} item={item} concepts={concepts} markdown={markdown} load={load} />)}</ul>
+  </div>);
+}
+
+function ReadingContent({ document, course, stem }) {
   const summaries = document.sections.filter((section) => section.kind === 'summary');
   const emphases = document.sections.filter((section) => section.kind === 'emphasis');
   const concepts = document.sections.filter((section) => section.kind === 'concept');
@@ -75,6 +117,12 @@ function ReadingContent({ document, course }) {
   ];
   const current = modes.find((item) => item.id === mode);
   const markdown = (text) => <NoteMarkdown text={text} course={course} definitions={document.definitions} />;
+  const transcript = useRef(null);
+  const loadTranscript = useCallback(() => {
+    transcript.current ??= localFetch(`/api/local/courses/${encodeURIComponent(course)}/transcripts/${stem}`)
+      .then((result) => result.text).catch((failure) => { transcript.current = null; throw failure; });
+    return transcript.current;
+  }, [course, stem]);
   const next = mode === 'summary' && emphases.length ? ['emphasis', '교수님 강조 →']
     : mode !== 'concept' && concepts.length ? ['concept', '개념 읽기 →']
       : document.questions.length ? ['practice', '문제 풀어보기 →'] : ['all', '전체 내용 읽기 →'];
@@ -94,9 +142,10 @@ function ReadingContent({ document, course }) {
       {mode === 'all' ? <><p className="note-help">저장된 노트의 전체 내용입니다. 이 모드에는 문제의 정답도 함께 표시됩니다.</p>{markdown(document.text)}</> : null}
       {mode === 'summary' || mode === 'emphasis' || mode === 'concept' ? <>
         {mode === 'summary' ? <p className="note-help">이 노트에 정리된 핵심 내용입니다. 강의 전체의 시험 범위를 뜻하지는 않습니다.</p> : null}
-        {mode === 'emphasis' ? <p className="note-help">강의에서 교수님이 직접 말한 강조입니다. ‘외울 필요 없음’도 함께 확인하세요. 시각은 전사 기준이며 실제 출제를 보장하지 않습니다.</p> : null}
+        {mode === 'emphasis' ? <p className="note-help">강의에서 교수님이 직접 말한 강조입니다. 항목을 눌러 정리된 강의 내용과 전사 원문을 확인하세요. ‘외울 필요 없음’도 함께 보세요. 실제 출제를 보장하지 않습니다.</p> : null}
         {mode === 'concept' && concepts.length > 1 ? <nav className="note-toc" aria-label="개념 목차">{concepts.map((section) => <a key={section.id} href={`#${section.id}`}>{section.title}</a>)}</nav> : null}
-        {({ summary: summaries, emphasis: emphases, concept: concepts })[mode].map((section) => <section className="note-chapter" key={section.id} id={section.id} tabIndex={-1}>{markdown(section.text)}</section>)}
+        {({ summary: summaries, emphasis: emphases, concept: concepts })[mode].map((section) => <section className="note-chapter" key={section.id} id={section.id} tabIndex={-1}>
+          {mode === 'emphasis' ? <EmphasisSection section={section} concepts={concepts} markdown={markdown} load={loadTranscript} /> : markdown(section.text)}</section>)}
         {uncertain.map((section) => <details className="note-uncertain" key={section.id}><summary>확인 필요한 내용 · 펼쳐 보기</summary>{markdown(section.text)}</details>)}
         <div className="note-next"><p>{mode === 'concept' ? '내용을 보지 않고 설명할 수 있는지 확인해 보세요.' : '핵심을 봤다면 이유와 차이를 이해해 보세요.'}</p>
           <button className="primary" onClick={() => choose(next[0])}>{next[1]}</button></div>
@@ -190,6 +239,6 @@ export default function NoteReader({ course, stem, onClose }) {
     {error ? <div className="note-loading"><p className="message error" role="alert">{error}</p><button className="primary" onClick={() => setAttempt((value) => value + 1)}>다시 불러오기</button></div>
       : !document ? <p className="note-loading" role="status">노트를 불러오는 중…</p>
         : editing ? <NoteEditor course={course} draft={draft} setDraft={setDraft} saving={saving} preview={<NoteMarkdown text={draft} course={course} />} />
-        : <ReadingContent document={document} course={course} />}
+        : <ReadingContent document={document} course={course} stem={stem} />}
   </dialog>, window.document.body);
 }

@@ -46,6 +46,18 @@
 .note-image-error { display: block; border: 1px dashed var(--color-smoke); padding: 20px; font-size: 14px; color: var(--color-muted); }
 .note-source { border-top: 1px solid var(--color-border); margin: 16px 0; font-size: 14px; }
 .note-source summary { padding: 10px 0; cursor: pointer; color: var(--color-accent); }
+.note-emphasis h3 { font-size: 18px; margin: 28px 0 8px; }
+.note-emphasis ul { list-style: none; margin: 0; padding: 0; }
+.note-emphasis-item { border-bottom: 1px solid var(--color-border); }
+.note-emphasis-item > summary { min-height: 44px; padding: 12px 0; cursor: pointer; line-height: 1.7; font-size: 16px; }
+.note-emphasis-item > div { padding: 4px 20px 16px; border-left: 2px solid var(--color-accent); margin-bottom: 16px; }
+.note-emphasis-item h4 { font-size: 13px; color: var(--color-muted); margin: 16px 0 6px; font-weight: 600; }
+.note-emphasis-item .note-markdown { font-size: 16px; }
+.note-emphasis-concept + .note-emphasis-concept { border-top: 1px solid var(--color-border); margin-top: 16px; }
+.note-transcript { margin: 8px 0; padding: 0; font-size: 15px; line-height: 1.8; color: var(--color-muted); }
+.note-transcript p { margin: 4px 0; }
+.note-transcript time { font-variant-numeric: tabular-nums; margin-right: 6px; }
+.note-transcript .note-hit { color: var(--color-ink); font-weight: 600; }
 .note-toc { display: flex; flex-wrap: wrap; gap: 8px 20px; padding-bottom: 24px; font-size: 14px; }
 .note-toc a { color: var(--color-accent); text-decoration: underline; text-underline-offset: 4px; }
 .note-chapter { border-bottom: 1px solid var(--color-border); padding: 22px 0; scroll-margin-top: 24px; }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { parseNote, pageImageUrl, noteLinkUrl, pageMarkdown } from './noteDocument.js';
+import { parseNote, pageImageUrl, noteLinkUrl, pageMarkdown, transcriptWindow } from './noteDocument.js';
 import { unified } from 'unified';
 import remarkParse from 'remark-parse';
 
@@ -49,4 +49,34 @@ test('inserted page Markdown preserves captions and filenames as one image', () 
 test('emphasis section is its own kind and never counted as a concept', () => {
   const note = parseNote('# 노트\n## 핵심 암기사항\n핵심\n## 교수님 강조\n- 외우기 — [00:00:01]\n## 1. 개념\n설명\n## 불확실한 내용\n없음');
   assert.deepEqual(note.sections.map(s => s.kind), ['summary', 'emphasis', 'concept', 'uncertain']);
+});
+
+test('emphasis items split into headline, concept references and cited times', () => {
+  const note = parseNote([
+    '# 노트', '## 교수님 강조', '',
+    '**반드시 외우기**', '',
+    '- 관리 주기를 기억 — [00:13:54] (개념 2)', '',
+    '- 단위도 기억 — [00:20:27], [00:20:34] (개념 1, 3)', '',
+    '**외울 필요 없음**', '',
+    '- 연도는 안 외움 — [00:03:34]', '',
+    '## 1. 개념', '설명'].join('\n'));
+  const [section] = note.sections;
+  assert.deepEqual(section.groups.map(g => g.label), ['반드시 외우기', '외울 필요 없음']);
+  const [first, second] = section.groups[0].items;
+  assert.equal(first.headline, '관리 주기를 기억 — [00:13:54]');
+  assert.deepEqual(first.concepts, [2]);
+  assert.deepEqual(first.stamps, ['00:13:54']);
+  assert.deepEqual(second.concepts, [1, 3]);
+  assert.deepEqual(second.stamps, ['00:20:27', '00:20:34']);
+  assert.deepEqual(section.groups[1].items[0].concepts, []);
+});
+
+test('transcript window shows the cited line with context and nothing for unknown times', () => {
+  const lines = Array.from({ length: 10 }, (_, i) => `[00:00:${String(i * 5).padStart(2, '0')}] 줄${i}`).join('\n');
+  const window = transcriptWindow(lines, '00:00:20');
+  assert.deepEqual(window.map(l => l.text), ['줄3', '줄4', '줄5', '줄6', '줄7', '줄8']);
+  assert.deepEqual(window.map(l => l.hit), [false, true, false, false, false, false]);
+  assert.equal(window[1].stamp, '00:00:20');
+  assert.deepEqual(transcriptWindow(lines, '00:09:09'), []);
+  assert.equal(transcriptWindow(lines, '00:00:00')[0].hit, true);
 });

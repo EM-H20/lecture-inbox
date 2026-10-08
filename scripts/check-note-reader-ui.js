@@ -22,7 +22,7 @@ async (page) => {
 
 **반드시 외우기**
 
-- 수온은 단위까지 기억 — [00:21:41]
+- 수온은 단위까지 기억 — [00:21:41] (개념 1)
 
 **외울 필요 없음**
 
@@ -70,6 +70,7 @@ $$
       const path = decodeURIComponent(new URL(route.request().url()).pathname);
       if (path === '/api/local/courses') return route.fulfill({ json: { courses: [{ name: '시험강의', documents: [], lectures: [{stem:'week_01_01',week:1,session:1,hasNote:true}] }] } });
       if (path === '/api/local/study') return route.fulfill({ json: {agents:[],job:null,selectionSupported:true} });
+      if (path.includes('/transcripts/')) return route.fulfill({json:{stem:'week_01_01',text:'[00:21:30] 앞 발언\n[00:21:41] 수온은 구십에서 구십오도\n[00:21:50] 뒤 발언\n'}});
       if (path.includes('/notes/')) return failed ? route.fulfill({status:500,json:{detail:'노트 오류 테스트'}}) : route.fulfill({json:{text}});
       if (path.includes('/pages/')) {
         imageRequests.push(path);
@@ -93,7 +94,15 @@ $$
     await reader.getByRole('button',{name:'교수님 강조 →'}).click();
     check(await reader.getByRole('button',{name:/교수님 강조 외울/}).getAttribute('aria-pressed')==='true','Emphasis mode not opened');
     check(await reader.getByText('연도는 외우지 않아도 됨',{exact:false}).isVisible(),'Skip-memorizing item missing');
-    check(!await reader.getByText('분산과 용해는 다릅니다',{exact:false}).isVisible(),'Concept leaked into emphasis mode');
+    check(!await reader.getByText('수온은 구십에서 구십오도',{exact:false}).isVisible(),'Transcript shown before opening the toggle');
+    await reader.getByText('수온은 단위까지 기억',{exact:false}).click();
+    await reader.getByText('수온은 구십에서 구십오도',{exact:false}).waitFor();
+    check(await reader.getByText('정리된 강의 내용',{exact:true}).isVisible(),'Linked concept heading missing');
+    check(await reader.locator('.note-emphasis-item .note-emphasis-concept').getByText('분산과 용해는 다릅니다',{exact:false}).isVisible(),'Linked concept content missing in toggle');
+    await p.waitForFunction(()=>[...document.querySelectorAll('.note-emphasis-item img')].some(i=>i.naturalWidth>0));
+    check(await reader.getByText('앞 발언',{exact:false}).isVisible(),'Transcript context missing');
+    await reader.getByText('수온은 단위까지 기억',{exact:false}).click();
+    check(!await reader.getByText('분산과 용해는 다릅니다',{exact:false}).isVisible(),'Concept shown while toggle closed');
     await reader.getByRole('button',{name:'개념 읽기 →'}).click();
     check(!await reader.getByText('수온은 단위까지 기억',{exact:false}).isVisible(),'Emphasis leaked into concept mode');
     await reader.locator('.katex').first().waitFor();
@@ -121,6 +130,6 @@ $$
     check(!await reader.isVisible(),'Escape did not close');
     check(await opener.evaluate(node=>node===document.activeElement),'Focus not returned to opener');
     check(errors.length===0,errors.join('\n'));
-    return {summary:true,markdownTables:true,math:true,safeImages:true,imageFailure:true,sourceDisclosure:true,emphasis:true,quiz:true,keyboard:true,focusReturn:true,retry:true,responsive:true};
+    return {summary:true,markdownTables:true,math:true,safeImages:true,imageFailure:true,sourceDisclosure:true,emphasis:true,emphasisToggle:true,quiz:true,keyboard:true,focusReturn:true,retry:true,responsive:true};
   } finally { await context.close(); }
 }

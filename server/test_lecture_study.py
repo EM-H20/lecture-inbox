@@ -52,21 +52,34 @@ class NoteShapeTests(unittest.TestCase):
             with self.subTest(name):
                 self.assertNotEqual(self.problems(text), [])
 
+    EMPHASIS = '## 교수님 강조\n\n**반드시 외우기**\n\n- 단위까지 기억 — [00:00:00] (개념 1)\n\n'
+
     def test_optional_emphasis_section_sits_right_after_summary(self):
-        emphasis = '## 교수님 강조\n\n**반드시 외우기**\n- 단위까지 기억 — [00:00:00]\n\n'
-        with_emphasis = NOTE.replace('## 1. 개념', emphasis + '## 1. 개념')
+        with_emphasis = NOTE.replace('## 1. 개념', self.EMPHASIS + '## 1. 개념')
         self.assertEqual(self.problems(with_emphasis), [])
         for name, text in {
-            'before summary': NOTE.replace('## 핵심 암기사항', emphasis + '## 핵심 암기사항'),
-            'after concepts': NOTE.replace('## 예상문제와 해설', emphasis + '## 예상문제와 해설'),
-            'twice': with_emphasis.replace('## 1. 개념', emphasis + '## 1. 개념'),
+            'before summary': NOTE.replace('## 핵심 암기사항', self.EMPHASIS + '## 핵심 암기사항'),
+            'after concepts': NOTE.replace('## 예상문제와 해설', self.EMPHASIS + '## 예상문제와 해설'),
+            'twice': with_emphasis.replace('## 1. 개념', self.EMPHASIS + '## 1. 개념'),
         }.items():
             with self.subTest(name):
                 self.assertNotEqual(self.problems(text), [])
 
+    def test_every_emphasis_item_needs_a_timestamp_and_valid_concept_refs(self):
+        def note(item):
+            return NOTE.replace('## 1. 개념', f'## 교수님 강조\n\n**반드시 외우기**\n\n{item}## 1. 개념')
+        self.assertEqual(self.problems(note('- 개념 없는 강조 — [00:00:00]\n\n')), [])
+        self.assertEqual(self.problems(note('- 여럿 — [00:00:00] (개념 1, 1)\n\n')), [])
+        for name, item in {
+            'no timestamp': '- 단위까지 기억 (개념 1)\n\n',
+            'missing concept': '- 단위까지 기억 — [00:00:00] (개념 2)\n\n',
+            'one bad ref among good': '- 단위까지 기억 — [00:00:00] (개념 1, 7)\n\n',
+        }.items():
+            with self.subTest(name):
+                self.assertNotEqual(self.problems(note(item)), [])
+
     def test_emphasis_timestamps_are_checked_against_the_transcript(self):
-        emphasis = '## 교수님 강조\n\n- 외우기 — [00:09:09]\n\n'
-        text = NOTE.replace('## 1. 개념', emphasis + '## 1. 개념')
+        text = NOTE.replace('## 1. 개념', self.EMPHASIS.replace('00:00:00', '00:09:09') + '## 1. 개념')
         problems = note_problems(text, '강의', self.root, '[00:00:00] 내용')
         self.assertTrue(any('00:09:09' in item for item in problems))
 
