@@ -71,6 +71,11 @@ test('emphasis items split into headline, concept references and cited times', (
   assert.deepEqual(section.groups[1].items[0].concepts, []);
 });
 
+test('a single tilde is a range, not strikethrough, so it survives in parsed text', () => {
+  const note = parseNote('# 노트\n## 교수님 강조\n- 추출 8~10 기압, 스팀 1~1.5 기압 — [00:09:14]\n## 1. 개념\n설명');
+  assert.equal(note.sections[0].groups[0].items[0].headline, '추출 8~10 기압, 스팀 1~1.5 기압 — [00:09:14]');
+});
+
 test('transcript window shows the cited line with context and nothing for unknown times', () => {
   const lines = Array.from({ length: 10 }, (_, i) => `[00:00:${String(i * 5).padStart(2, '0')}] 줄${i}`).join('\n');
   const window = transcriptWindow(lines, '00:00:20');

@@ -3,7 +3,9 @@ import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 
-const parser = unified().use(remarkParse).use(remarkGfm).use(remarkMath);
+// Notes write ranges as "8~10"; only "~~text~~" is strikethrough.
+export const gfmOptions = { singleTilde: false };
+const parser = unified().use(remarkParse).use(remarkGfm, gfmOptions).use(remarkMath);
 const plain = (node) => node.value ?? (node.children || []).map(plain).join('');
 
 const STAMP = /\[(\d{2}:[0-5]\d:[0-5]\d)\]/g;

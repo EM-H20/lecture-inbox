@@ -6,7 +6,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import { lectureLabel, localFetch } from './localApi.js';
-import { noteLinkUrl, pageImageUrl, parseNote, transcriptWindow } from './noteDocument.js';
+import { gfmOptions, noteLinkUrl, pageImageUrl, parseNote, transcriptWindow } from './noteDocument.js';
 import NoteEditor from './NoteEditor.jsx';
 import './note-reader.css';
 
@@ -53,7 +53,7 @@ function foldSources() {
 }
 
 function NoteMarkdown({ text, course, definitions = '', print = false }) {
-  return <div className="note-markdown"><Markdown skipHtml remarkPlugins={print ? [remarkGfm, remarkMath] : [remarkGfm, remarkMath, foldSources]}
+  return <div className="note-markdown"><Markdown skipHtml remarkPlugins={print ? [[remarkGfm, gfmOptions], remarkMath] : [[remarkGfm, gfmOptions], remarkMath, foldSources]}
     rehypePlugins={[[rehypeKatex, { trust: false, strict: 'ignore' }]]} components={print ? printComponents : markdownComponents}
     urlTransform={(url, key) => key === 'src' ? pageImageUrl(url, course) : noteLinkUrl(url, course)}>
     {`${text}\n\n${definitions}`}

@@ -10,7 +10,7 @@ async (page) => {
 
 ## 핵심 암기사항
 
-**숫자와 단위**를 함께 기억합니다.
+**숫자와 단위**를 함께 기억합니다. 추출은 8~10 기압, 스팀은 1~1.5 기압입니다.
 
 | 항목 | 기준 |
 | --- | --- |
@@ -117,6 +117,9 @@ $$
     check(await p.title()===appTitle,'Title not restored after printing');
     await p.emulateMedia({media:'screen'});
     check(await reader.getByRole('button',{name:/핵심 훑기/}).getAttribute('aria-pressed')==='true','Summary not first');
+    // "8~10" is a range: a single tilde must not strike through the text between two ranges.
+    check(await p.locator('del').count()===0,'Single tilde rendered as strikethrough');
+    check(await reader.getByText('추출은 8~10 기압, 스팀은 1~1.5 기압입니다.',{exact:false}).isVisible(),'Tilde range text missing');
     check(!await reader.getByText('교안 p.10 · 전사 [00:21:41]',{exact:false}).isVisible(),'Sources not folded');
     await reader.getByText('교안·강의 근거 펼치기',{exact:true}).click();
     check(await reader.getByText('근거: 교안 p.10 · 전사 [00:21:41]',{exact:true}).isVisible(),'Source did not expand');
