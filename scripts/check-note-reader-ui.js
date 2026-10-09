@@ -88,6 +88,30 @@ $$
     failed=false;
     await reader.getByRole('button',{name:'다시 불러오기'}).click();
     await reader.getByRole('table').waitFor();
+    // PDF 저장 prints the whole saved note (answers and sources unfolded) without the reader controls.
+    await reader.getByRole('button',{name:'PDF 저장'}).waitFor();
+    check(await reader.getByRole('button',{name:'PDF 저장'}).isEnabled(),'PDF button not ready');
+    await p.emulateMedia({media:'print'});
+    const sheet=p.locator('.note-print');
+    check(!await reader.isVisible(),'Reader controls printed');
+    // Everything a toggle reveals on screen is printed expanded: the linked concept and the transcript excerpt.
+    const printedItem=sheet.locator('.note-emphasis-item').filter({hasText:'수온은 단위까지 기억'});
+    check(await printedItem.getByText('수온은 구십에서 구십오도',{exact:false}).isVisible(),'Transcript excerpt missing from print');
+    check(await printedItem.getByText('앞 발언',{exact:false}).isVisible(),'Transcript context missing from print');
+    check(await printedItem.getByText('분산과 용해는 다릅니다',{exact:false}).isVisible(),'Linked concept missing from print');
+    check(await sheet.getByRole('heading',{name:'교수님 강조',exact:true}).isVisible(),'Emphasis heading missing from print');
+    check(await sheet.getByRole('heading',{name:'추출을 이해하기',exact:true}).isVisible(),'Note title missing from print');
+    check(await sheet.getByText('음료가 아닌 추출수입니다.',{exact:false}).isVisible(),'Answer missing from print');
+    check(await sheet.getByText('근거: 교안 p.10 · 전사 [00:21:41]',{exact:true}).isVisible(),'Source folded in print');
+    check(await sheet.locator('.katex').first().isVisible(),'Math missing from print');
+    check(!await sheet.getByText('교안 크게 보기',{exact:false}).first().isVisible(),'Image link printed');
+    await p.waitForFunction(()=>document.querySelector('.note-print .note-figure img')?.naturalWidth>0);
+    const appTitle=await p.title();
+    await p.evaluate(()=>dispatchEvent(new Event('beforeprint')));
+    check(await p.title()==='시험강의_week_01_01','PDF file name not set');
+    await p.evaluate(()=>dispatchEvent(new Event('afterprint')));
+    check(await p.title()===appTitle,'Title not restored after printing');
+    await p.emulateMedia({media:'screen'});
     check(await reader.getByRole('button',{name:/핵심 훑기/}).getAttribute('aria-pressed')==='true','Summary not first');
     check(!await reader.getByText('교안 p.10 · 전사 [00:21:41]',{exact:false}).isVisible(),'Sources not folded');
     await reader.getByText('교안·강의 근거 펼치기',{exact:true}).click();
@@ -100,14 +124,14 @@ $$
     await reader.getByText('수온은 구십에서 구십오도',{exact:false}).waitFor();
     check(await reader.getByText('정리된 강의 내용',{exact:true}).isVisible(),'Linked concept heading missing');
     check(await reader.locator('.note-emphasis-item .note-emphasis-concept').getByText('분산과 용해는 다릅니다',{exact:false}).isVisible(),'Linked concept content missing in toggle');
-    await p.waitForFunction(()=>[...document.querySelectorAll('.note-emphasis-item img')].some(i=>i.naturalWidth>0));
+    await p.waitForFunction(()=>[...document.querySelectorAll('dialog .note-emphasis-item img')].some(i=>i.naturalWidth>0));
     check(await reader.getByText('앞 발언',{exact:false}).isVisible(),'Transcript context missing');
     await reader.getByText('수온은 단위까지 기억',{exact:false}).click();
     check(!await reader.getByText('분산과 용해는 다릅니다',{exact:false}).isVisible(),'Concept shown while toggle closed');
     await reader.getByRole('button',{name:'개념 읽기 →'}).click();
     check(!await reader.getByText('수온은 단위까지 기억',{exact:false}).isVisible(),'Emphasis leaked into concept mode');
     await reader.locator('.katex').first().waitFor();
-    await p.waitForFunction(()=>document.querySelector('.note-figure img')?.naturalWidth>0);
+    await p.waitForFunction(()=>document.querySelector('dialog .note-figure img')?.naturalWidth>0);
     await reader.getByText(/교안을 불러오지 못했습니다/).waitFor();
     check(await reader.locator('script,img[src^="http"],a[href^="javascript"]').count()===0,'Unsafe markup or external image rendered');
     check(!await p.evaluate(()=>window.readerXss),'Raw HTML executed');
@@ -143,6 +167,6 @@ $$
     check(await p.evaluate(()=>history.state?.noteReader!==true),'Close button left a stale history entry');
     check(p.url()===appUrl,'Close button changed the address');
     check(errors.length===0,errors.join('\n'));
-    return {summary:true,markdownTables:true,math:true,safeImages:true,imageFailure:true,sourceDisclosure:true,emphasis:true,emphasisToggle:true,quiz:true,keyboard:true,focusReturn:true,browserBack:true,retry:true,responsive:true};
+    return {summary:true,markdownTables:true,math:true,safeImages:true,imageFailure:true,sourceDisclosure:true,emphasis:true,emphasisToggle:true,quiz:true,keyboard:true,focusReturn:true,browserBack:true,retry:true,responsive:true,print:true};
   } finally { await context.close(); }
 }

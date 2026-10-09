@@ -10,12 +10,12 @@ import { noteLinkUrl, pageImageUrl, parseNote, transcriptWindow } from './noteDo
 import NoteEditor from './NoteEditor.jsx';
 import './note-reader.css';
 
-function PageImage({ src, alt }) {
+function PageImage({ src, alt, eager = false }) {
   const [failed, setFailed] = useState(false);
   if (!src) return <span className="note-image-error">허용된 교안 이미지 경로가 아닙니다. {alt}</span>;
   return <span className="note-figure">
     {failed ? <span className="note-image-error">교안을 불러오지 못했습니다. 서버 재시작 또는 교안 준비 상태를 확인해 주세요.</span>
-      : <img src={src} alt={alt || '교안 페이지'} loading="lazy" onError={() => setFailed(true)} />}
+      : <img src={src} alt={alt || '교안 페이지'} loading={eager ? 'eager' : 'lazy'} onError={() => setFailed(true)} />}
     <span className="note-caption">{alt} <a href={src} target="_blank" rel="noopener noreferrer">교안 크게 보기 ↗</a></span>
   </span>;
 }
@@ -25,6 +25,8 @@ const markdownComponents = {
   a: ({ href, children }) => href ? <a href={href} target="_blank" rel="noopener noreferrer">{children}</a> : <span>{children}</span>,
   table: ({ children }) => <div className="note-table" role="region" aria-label="노트 표" tabIndex={0}><table>{children}</table></div>,
 };
+// The print copy stays display:none on screen, where lazy images never load.
+const printComponents = { ...markdownComponents, img: ({ src, alt }) => <PageImage key={src} src={src} alt={alt} eager /> };
 
 function foldSources() {
   const plain = (node) => node.value ?? (node.children || []).map(plain).join('');
@@ -50,9 +52,9 @@ function foldSources() {
   };
 }
 
-function NoteMarkdown({ text, course, definitions = '' }) {
-  return <div className="note-markdown"><Markdown skipHtml remarkPlugins={[remarkGfm, remarkMath, foldSources]}
-    rehypePlugins={[[rehypeKatex, { trust: false, strict: 'ignore' }]]} components={markdownComponents}
+function NoteMarkdown({ text, course, definitions = '', print = false }) {
+  return <div className="note-markdown"><Markdown skipHtml remarkPlugins={print ? [remarkGfm, remarkMath] : [remarkGfm, remarkMath, foldSources]}
+    rehypePlugins={[[rehypeKatex, { trust: false, strict: 'ignore' }]]} components={print ? printComponents : markdownComponents}
     urlTransform={(url, key) => key === 'src' ? pageImageUrl(url, course) : noteLinkUrl(url, course)}>
     {`${text}\n\n${definitions}`}
   </Markdown></div>;
@@ -77,10 +79,10 @@ function TranscriptExcerpt({ stamps, load }) {
   });
 }
 
-function EmphasisItem({ item, concepts, markdown, load }) {
-  const [opened, setOpened] = useState(false);
+function EmphasisItem({ item, concepts, markdown, load, print }) {
+  const [opened, setOpened] = useState(print);
   const linked = item.concepts.map((number) => ({ number, section: concepts.find((section) => parseInt(section.title, 10) === number) }));
-  return <li><details className="note-emphasis-item" onToggle={(event) => event.currentTarget.open && setOpened(true)}>
+  return <li><details className="note-emphasis-item" open={print || undefined} onToggle={(event) => event.currentTarget.open && setOpened(true)}>
     <summary>{item.headline}</summary>
     <div>
       {linked.length ? <div><h4>정리된 강의 내용</h4>
@@ -91,16 +93,28 @@ function EmphasisItem({ item, concepts, markdown, load }) {
   </details></li>;
 }
 
-function EmphasisSection({ section, concepts, markdown, load }) {
+function EmphasisSection({ section, concepts, markdown, load, print = false }) {
   const groups = section.groups.filter((group) => group.items.length);
   if (!groups.length) return markdown(section.text);
-  return groups.map((group, index) => <div className="note-emphasis" key={index}>
-    {group.label ? <h3>{group.label}</h3> : null}
-    <ul>{group.items.map((item, position) => <EmphasisItem key={position} item={item} concepts={concepts} markdown={markdown} load={load} />)}</ul>
-  </div>);
+  return <>{print ? markdown(section.text.split('\n', 1)[0]) : null}
+    {groups.map((group, index) => <div className="note-emphasis" key={index}>
+      {group.label ? <h3>{group.label}</h3> : null}
+      <ul>{group.items.map((item, position) => <EmphasisItem key={position} item={item} concepts={concepts} markdown={markdown} load={load} print={print} />)}</ul>
+    </div>)}</>;
 }
 
-function ReadingContent({ document, course, stem }) {
+// The PDF has no toggles, so everything a toggle reveals on screen is printed expanded.
+function PrintNote({ document, course, load }) {
+  const markdown = (text) => <NoteMarkdown text={text} course={course} definitions={document.definitions} print />;
+  const concepts = document.sections.filter((section) => section.kind === 'concept');
+  return <div className="note-print"><p className="note-eyebrow">{course} · 시험 대비 노트</p>
+    {markdown(document.text.slice(0, document.sections[0]?.start ?? document.text.length))}
+    {document.sections.map((section) => <section key={section.id}>{section.kind === 'emphasis'
+      ? <EmphasisSection section={section} concepts={concepts} markdown={markdown} load={load} print /> : markdown(section.text)}</section>)}
+  </div>;
+}
+
+function ReadingContent({ document, course, loadTranscript }) {
   const summaries = document.sections.filter((section) => section.kind === 'summary');
   const emphases = document.sections.filter((section) => section.kind === 'emphasis');
   const concepts = document.sections.filter((section) => section.kind === 'concept');
@@ -117,12 +131,6 @@ function ReadingContent({ document, course, stem }) {
   ];
   const current = modes.find((item) => item.id === mode);
   const markdown = (text) => <NoteMarkdown text={text} course={course} definitions={document.definitions} />;
-  const transcript = useRef(null);
-  const loadTranscript = useCallback(() => {
-    transcript.current ??= localFetch(`/api/local/courses/${encodeURIComponent(course)}/transcripts/${stem}`)
-      .then((result) => result.text).catch((failure) => { transcript.current = null; throw failure; });
-    return transcript.current;
-  }, [course, stem]);
   const next = mode === 'summary' && emphases.length ? ['emphasis', '교수님 강조 →']
     : mode !== 'concept' && concepts.length ? ['concept', '개념 읽기 →']
       : document.questions.length ? ['practice', '문제 풀어보기 →'] : ['all', '전체 내용 읽기 →'];
@@ -180,6 +188,25 @@ export default function NoteReader({ course, stem, onClose }) {
   const editing = draft !== null;
   const dirty = editing && draft !== document?.text;
   const noteUrl = `/api/local/courses/${encodeURIComponent(course)}/notes/${stem}`;
+  // Shared by the emphasis toggles and the print copy, so the transcript is fetched once.
+  const transcript = useRef(null);
+  const loadTranscript = useCallback(() => {
+    transcript.current ??= localFetch(`/api/local/courses/${encodeURIComponent(course)}/transcripts/${stem}`)
+      .then((result) => result.text).catch((failure) => { transcript.current = null; throw failure; });
+    return transcript.current;
+  }, [course, stem]);
+  // PDF 저장 waits until the printed transcript excerpts have loaded (or failed).
+  const [printReady, setPrintReady] = useState(false);
+  useEffect(() => {
+    setPrintReady(false);
+    if (!document) return undefined;
+    if (!document.sections.some((section) => section.groups?.some((group) => group.items.some((item) => item.stamps.length)))) {
+      setPrintReady(true); return undefined;
+    }
+    let stopped = false;
+    loadTranscript().catch(() => {}).finally(() => { if (!stopped) setPrintReady(true); });
+    return () => { stopped = true; };
+  }, [document, loadTranscript]);
   useEffect(() => {
     const node = dialog.current;
     const overflow = window.document.body.style.overflow;
@@ -205,6 +232,14 @@ export default function NoteReader({ course, stem, onClose }) {
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
   }, [dirty, saving]);
+  useEffect(() => {  // the print dialog suggests the page title as the PDF file name
+    const title = window.document.title;
+    const named = () => { window.document.title = `${course}_${stem}`; };
+    const restore = () => { window.document.title = title; };
+    window.addEventListener('beforeprint', named);
+    window.addEventListener('afterprint', restore);
+    return () => { window.removeEventListener('beforeprint', named); window.removeEventListener('afterprint', restore); restore(); };
+  }, [course, stem]);
   function mayLeave() {
     return !savePending.current && (!dirty || window.confirm('저장하지 않은 수정 내용이 있습니다. 버리고 나갈까요?'));
   }
@@ -246,9 +281,10 @@ export default function NoteReader({ course, stem, onClose }) {
     if (!mayLeave()) return;
     if (window.history.state?.noteReader) { confirmed.current = true; window.history.back(); } else onClose();
   }
-  return createPortal(<dialog className={`note-reader${editing ? ' note-editing' : ''}`} ref={dialog} aria-labelledby="reader-title" onCancel={(event) => { event.preventDefault(); close(); }}>
+  return createPortal(<><dialog className={`note-reader${editing ? ' note-editing' : ''}`} ref={dialog} aria-labelledby="reader-title" onCancel={(event) => { event.preventDefault(); close(); }}>
     <div className="note-topbar"><strong id="reader-title">{course} · {lectureLabel(Number(stem.slice(5, 7)), Number(stem.slice(8, 10)))}</strong>
       <div>{document ? <a className="text-button" download={`${course}_${stem}${editing ? '_수정본' : ''}.md`} href={`data:text/markdown;charset=utf-8,${encodeURIComponent(editing ? draft : document.text)}`}>{editing ? '수정본 내려받기 ↓' : 'Markdown 저장 ↓'}</a> : null}
+        {document && !editing ? <button className="text-button" disabled={!printReady} onClick={() => window.print()}>{printReady ? 'PDF 저장' : 'PDF 준비 중…'}</button> : null}
         {document && !editing ? <button className="secondary" ref={editButton} onClick={() => { setDraft(document.text); setSaved(false); }}>노트 수정</button> : null}
         {editing ? <><button className="secondary" disabled={saving} onClick={() => { if (mayLeave()) finishEditing(); }}>수정 취소</button>
           <button className="primary" disabled={saving || !dirty || !draft.trim()} onClick={save}>{saving ? '저장 중…' : '수정 내용 저장'}</button></> : null}
@@ -258,6 +294,8 @@ export default function NoteReader({ course, stem, onClose }) {
     {error ? <div className="note-loading"><p className="message error" role="alert">{error}</p><button className="primary" onClick={() => setAttempt((value) => value + 1)}>다시 불러오기</button></div>
       : !document ? <p className="note-loading" role="status">노트를 불러오는 중…</p>
         : editing ? <NoteEditor course={course} draft={draft} setDraft={setDraft} saving={saving} preview={<NoteMarkdown text={draft} course={course} />} />
-        : <ReadingContent document={document} course={course} stem={stem} />}
-  </dialog>, window.document.body);
+        : <ReadingContent document={document} course={course} loadTranscript={loadTranscript} />}
+  </dialog>
+  {document && !editing ? <PrintNote document={document} course={course} load={loadTranscript} /> : null}
+  </>, window.document.body);
 }

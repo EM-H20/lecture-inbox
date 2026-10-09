@@ -55,7 +55,7 @@ export function parseNote(text) {
         : /^(예상문제와 해설|연습문제)$/.test(title) ? 'practice'
         : /^(불확실한 내용|확인 필요한 내용)$/.test(title) ? 'uncertain' : 'concept';
     const nodes = tree.children.filter((node) => node.position.start.offset > start && node.position.start.offset < end);
-    return { id: `note-section-${index}`, title, kind, text: text.slice(start, end), nodes,
+    return { id: `note-section-${index}`, title, kind, start, text: text.slice(start, end), nodes,
       ...(kind === 'emphasis' ? { groups: emphasisGroups(nodes) } : {}) };
   });
   const practice = sections.filter((section) => section.kind === 'practice');
