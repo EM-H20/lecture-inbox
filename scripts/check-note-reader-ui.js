@@ -47,6 +47,10 @@ $$
 <script>window.readerXss=true</script>
 <img src=x onerror="window.readerXss=true">
 
+## 2. 두 번째 개념
+
+목차로 이동할 두 번째 설명입니다.
+
 ## 예상문제와 해설
 
 자료 기반 연습문제입니다.
@@ -130,6 +134,14 @@ $$
     check(!await reader.getByText('분산과 용해는 다릅니다',{exact:false}).isVisible(),'Concept shown while toggle closed');
     await reader.getByRole('button',{name:'개념 읽기 →'}).click();
     check(!await reader.getByText('수온은 단위까지 기억',{exact:false}).isVisible(),'Emphasis leaked into concept mode');
+    // The concept table of contents scrolls inside the reader; a #fragment navigation would read as Back and close it.
+    const historyLength=await p.evaluate(()=>history.length);
+    await reader.getByRole('navigation',{name:'개념 목차'}).getByRole('link',{name:'2. 두 번째 개념'}).click();
+    await p.waitForTimeout(200);
+    check(await reader.isVisible(),'Table of contents link closed the reader');
+    check(p.url()===appUrl && await p.evaluate(()=>history.length)===historyLength,'Table of contents link changed history');
+    check(await reader.getByText('목차로 이동할 두 번째 설명입니다.',{exact:true}).isVisible(),'Table of contents target not shown');
+    check(await p.evaluate(()=>document.activeElement?.id==='note-section-3'),'Table of contents target not focused');
     await reader.locator('.katex').first().waitFor();
     await p.waitForFunction(()=>document.querySelector('dialog .note-figure img')?.naturalWidth>0);
     await reader.getByText(/교안을 불러오지 못했습니다/).waitFor();
@@ -167,6 +179,6 @@ $$
     check(await p.evaluate(()=>history.state?.noteReader!==true),'Close button left a stale history entry');
     check(p.url()===appUrl,'Close button changed the address');
     check(errors.length===0,errors.join('\n'));
-    return {summary:true,markdownTables:true,math:true,safeImages:true,imageFailure:true,sourceDisclosure:true,emphasis:true,emphasisToggle:true,quiz:true,keyboard:true,focusReturn:true,browserBack:true,retry:true,responsive:true,print:true};
+    return {summary:true,markdownTables:true,math:true,safeImages:true,imageFailure:true,sourceDisclosure:true,emphasis:true,emphasisToggle:true,quiz:true,keyboard:true,focusReturn:true,browserBack:true,retry:true,responsive:true,print:true,tocLink:true};
   } finally { await context.close(); }
 }

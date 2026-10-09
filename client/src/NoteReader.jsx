@@ -151,7 +151,12 @@ function ReadingContent({ document, course, loadTranscript }) {
       {mode === 'summary' || mode === 'emphasis' || mode === 'concept' ? <>
         {mode === 'summary' ? <p className="note-help">이 노트에 정리된 핵심 내용입니다. 강의 전체의 시험 범위를 뜻하지는 않습니다.</p> : null}
         {mode === 'emphasis' ? <p className="note-help">강의에서 교수님이 직접 말한 강조입니다. 항목을 눌러 정리된 강의 내용과 전사 원문을 확인하세요. ‘외울 필요 없음’도 함께 보세요. 실제 출제를 보장하지 않습니다.</p> : null}
-        {mode === 'concept' && concepts.length > 1 ? <nav className="note-toc" aria-label="개념 목차">{concepts.map((section) => <a key={section.id} href={`#${section.id}`}>{section.title}</a>)}</nav> : null}
+        {mode === 'concept' && concepts.length > 1 ? <nav className="note-toc" aria-label="개념 목차">{concepts.map((section) => <a key={section.id} href={`#${section.id}`} onClick={(event) => {
+          event.preventDefault();  // a #fragment navigation adds a history entry, which the reader treats as Back
+          const target = window.document.getElementById(section.id);
+          target?.focus({ preventScroll: true });
+          target?.scrollIntoView({ block: 'start' });
+        }}>{section.title}</a>)}</nav> : null}
         {({ summary: summaries, emphasis: emphases, concept: concepts })[mode].map((section) => <section className="note-chapter" key={section.id} id={section.id} tabIndex={-1}>
           {mode === 'emphasis' ? <EmphasisSection section={section} concepts={concepts} markdown={markdown} load={loadTranscript} /> : markdown(section.text)}</section>)}
         {uncertain.map((section) => <details className="note-uncertain" key={section.id}><summary>확인 필요한 내용 · 펼쳐 보기</summary>{markdown(section.text)}</details>)}
