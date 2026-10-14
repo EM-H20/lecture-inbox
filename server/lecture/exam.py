@@ -3,6 +3,7 @@ import json
 import re
 from pathlib import Path
 
+from server.lecture.catalog import STEM
 from server.lecture.layout import output_dir, safe_course
 
 TYPES = ("mcq", "ox", "short", "essay")
@@ -27,12 +28,20 @@ def parse_response(text):
     """The JSON value in an agent reply; tolerates a code fence or a sentence around it."""
     text = text.strip()
     fenced = FENCE.search(text)
-    candidates = [text] + ([fenced[1]] if fenced else []) + ([text[text.find("{"):text.rfind("}") + 1]] if "{" in text else [])
-    for candidate in candidates:
+    for candidate in [text] + ([fenced[1]] if fenced else []):
         try:
             return json.loads(candidate), []
         except ValueError:
             continue
+    # Prose around the object may itself contain braces, so decode from each '{' instead of slicing first-to-last.
+    decoder = json.JSONDecoder()
+    for start in (index for index, char in enumerate(text) if char == "{"):
+        try:
+            value, _ = decoder.raw_decode(text, start)
+        except ValueError:
+            continue
+        if isinstance(value, dict) and "questions" in value:
+            return value, []
     return None, ["응답에서 JSON 객체를 읽지 못했습니다. 설명 없이 JSON 객체 하나만 출력하세요."]
 
 
@@ -129,6 +138,14 @@ def exam_prompt(course, settings, previous=(), problems=(), agent=""):
 {no_shell}{retry}"""
 
 
+def _settings_ok(settings):
+    """The settings the exam list and the sheet read; a hand-edited value here would break both screens."""
+    stems, counts = settings.get("stems"), settings.get("counts")
+    return isinstance(stems, list) and bool(stems) and all(isinstance(stem, str) and STEM.match(stem) for stem in stems) \
+        and isinstance(counts, dict) and all(type(counts.get(kind)) is int for kind in TYPES) \
+        and isinstance(settings.get("memo", ""), str) and isinstance(settings.get("emphasis", True), bool)
+
+
 def load_exam(path):
     """A saved exam, or ValueError when it is unreadable, another version, or hand-edited out of shape."""
     try:
@@ -136,8 +153,7 @@ def load_exam(path):
     except (OSError, ValueError):
         raise ValueError("unreadable") from None
     settings = exam.get("settings") if isinstance(exam, dict) else None
-    if not isinstance(exam, dict) or exam.get("version") != 1 or not isinstance(settings, dict) \
-            or not isinstance(settings.get("stems"), list) or not isinstance(settings.get("counts"), dict) \
+    if not isinstance(exam, dict) or exam.get("version") != 1 or not isinstance(settings, dict) or not _settings_ok(settings) \
             or not isinstance(exam.get("questions"), list) or not exam["questions"] \
             or any(shape_problems(n, question) for n, question in enumerate(exam["questions"], 1)):
         raise ValueError("unsupported")

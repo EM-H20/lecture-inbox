@@ -77,7 +77,7 @@ class ExamShapeTests(ExamRoot):
     def test_parse_response_tolerates_fences_and_prose(self):
         body = json.dumps({"questions": questions()}, ensure_ascii=False)
         for text in (body, f'```json\n{body}\n```', f'다음은 시험지입니다.\n```json\n{body}\n```\n확인해 주세요.',
-                     f'시험지입니다: {body} 끝.'):
+                     f'시험지입니다: {body} 끝.', f'형식 {{x}}에 맞췄습니다: {body}', f'{body}\n\n참고: {{중괄호}}를 썼습니다.'):
             with self.subTest(text=text[:20]):
                 data, problems = parse_response(text)
                 self.assertEqual((problems, data['questions'][0]['question']), ([], 'Q1'))
@@ -156,6 +156,25 @@ class ExamStoreTests(ExamRoot):
             with self.subTest(broken), self.assertRaises(ValueError):
                 read_exam(self.root, '강의', broken)
         self.assertEqual(list_exams(self.root, '없는 강의'), [])
+
+    def test_settings_the_screens_read_must_be_well_formed(self):
+        cases = {
+            'empty stems': dict(SETTINGS, stems=[]),
+            'number stem': dict(SETTINGS, stems=[5]),
+            'path stem': dict(SETTINGS, stems=['../week_01_01']),
+            'missing count': dict(SETTINGS, counts={'mcq': 2, 'ox': 1, 'short': 1}),
+            'text count': dict(SETTINGS, counts=dict(SETTINGS['counts'], mcq='2')),
+            'memo not text': dict(SETTINGS, memo=3),
+            'emphasis not bool': dict(SETTINGS, emphasis='yes'),
+        }
+        for n, (name, settings) in enumerate(cases.items()):
+            with self.subTest(name):
+                exam_id = f'2026101{n}-000000'
+                self.write_exam(exam_id, saved_exam(settings=settings))
+                with self.assertRaises(ValueError):
+                    read_exam(self.root, '강의', exam_id)
+                listed = {item['id']: item for item in list_exams(self.root, '강의')}
+                self.assertIn('error', listed[exam_id])
 
     def test_recent_exams_are_the_latest_five(self):
         for day in range(1, 8):
