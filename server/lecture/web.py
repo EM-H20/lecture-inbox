@@ -22,6 +22,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from server.lecture.catalog import list_courses
+from server.lecture.exam import MAX_MEMO, MAX_PER_TYPE, list_exams, read_exam
 from server.lecture.layout import LayoutError, documents_dir, pages_dir, safe_document, sources_dir, transcript_dir
 from server.lecture.pdf import MAX_BYTES as MAX_PDF_BYTES
 from server.lecture.pdf import MAX_PAGES, PdfError, delete_document, prepare_document
@@ -54,6 +55,21 @@ class StudyBody(BaseModel):
     agent: Literal["claude", "agy", "codex"]
     stems: list[Annotated[str, Field(pattern=r"^week_[0-9]{2}_[0-9]{2}$")]] = Field(min_length=1, max_length=9801)
     replace: bool = False
+
+
+class ExamCounts(BaseModel):
+    mcq: int = Field(ge=0, le=MAX_PER_TYPE)
+    ox: int = Field(ge=0, le=MAX_PER_TYPE)
+    short: int = Field(ge=0, le=MAX_PER_TYPE)
+    essay: int = Field(ge=0, le=MAX_PER_TYPE)
+
+
+class ExamBody(BaseModel):
+    agent: Literal["claude", "agy", "codex"]
+    stems: list[Annotated[str, Field(pattern=r"^week_[0-9]{2}_[0-9]{2}$")]] = Field(min_length=1, max_length=9801)
+    counts: ExamCounts
+    emphasis: bool = True
+    memo: str = Field(default="", max_length=MAX_MEMO)
 
 
 class NoteBody(BaseModel):
@@ -185,6 +201,34 @@ def create_router() -> APIRouter:
             return request.app.state.study.cancel(job_id)
         except KeyError:
             raise HTTPException(404, "정리 작업을 찾을 수 없습니다.") from None
+
+    @router.get("/courses/{course}/exams")
+    def exams(course: str = PathParam(min_length=1, max_length=100),
+              transcriber: Transcriber = Depends(get_transcriber)):
+        folder = course_folder(transcriber, course)
+        return {"exams": list_exams(transcriber.root, folder.name)}
+
+    @router.get("/courses/{course}/exams/{exam_id}")
+    def exam(course: str = PathParam(min_length=1, max_length=100),
+             exam_id: str = PathParam(pattern=r"^[0-9]{8}-[0-9]{6}$"),
+             transcriber: Transcriber = Depends(get_transcriber)):
+        folder = course_folder(transcriber, course)
+        try:
+            return {"id": exam_id, **read_exam(transcriber.root, folder.name, exam_id)}
+        except FileNotFoundError:
+            raise HTTPException(404, "시험지를 찾을 수 없습니다. 목록을 새로고침해 주세요.") from None
+        except ValueError:
+            raise HTTPException(422, "읽을 수 없는 시험지입니다. 파일이 손상되었거나 지원하지 않는 형식입니다.") from None
+
+    @router.post("/courses/{course}/exams", status_code=202)
+    def start_exam(body: ExamBody, request: Request, course: str = PathParam(min_length=1, max_length=100),
+                   transcriber: Transcriber = Depends(get_transcriber)):
+        folder = course_folder(transcriber, course)
+        try:
+            return request.app.state.study.submit_exam(folder.name, body.agent, body.stems, body.counts.model_dump(),
+                                                       body.emphasis, body.memo)
+        except LayoutError as error:
+            raise HTTPException(409, str(error)) from None
 
     @router.get("/courses/{course}/notes/{stem}")
     def note(course: str = PathParam(min_length=1, max_length=100),

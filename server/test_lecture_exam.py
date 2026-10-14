@@ -10,6 +10,7 @@ from server.lecture.exam import (exam_problems, exam_prompt, list_exams, note_co
 from server.lecture.layout import LayoutError
 from server.lecture.study import ACTIVE, StudyRunner
 from server.lecture_testing import wait_for
+from server.test_lecture_web import WebTestCase, H
 
 NOTE = ('# 강의 — 주제\n\n01주차 01번째 강의 · 교안 A p.1 · 전사 약 00:00:00–00:00:01\n\n'
         '## 핵심 암기사항\n\n요약\n\n## 1. 첫 개념\n\n설명\n\n## 2. 둘째 개념\n\n설명\n\n'
@@ -322,6 +323,52 @@ else:
                 patch('server.lecture.study.time.sleep'), self.assertRaises(RuntimeError):
             StudyRunner._publish(final, self.exams)
         self.assertEqual(existing.read_text(), '기존')
+
+
+class ExamApiTests(WebTestCase):
+    BODY = {'agent': 'claude', 'stems': ['week_01_01'], 'counts': {'mcq': 2, 'ox': 1, 'short': 1, 'essay': 1},
+            'emphasis': False, 'memo': '메모'}
+
+    def test_create_validates_and_delegates(self):
+        self.make_course()
+        path = '/api/local/courses/강의/exams'
+        self.assertEqual(self.client.post(path, json=self.BODY).status_code, 403)
+        for name, change in {
+            'unknown agent': {'agent': 'sh'},
+            'no stems': {'stems': []},
+            'bad stem': {'stems': ['../x']},
+            'over per-type': {'counts': {'mcq': 51, 'ox': 0, 'short': 0, 'essay': 0}},
+            'missing type': {'counts': {'mcq': 1, 'ox': 0, 'short': 0}},
+            'long memo': {'memo': '가' * 201},
+        }.items():
+            with self.subTest(name):
+                self.assertEqual(self.client.post(path, headers=H, json={**self.BODY, **change}).status_code, 422)
+        runner = self.client.app.state.study
+        with patch.object(runner, 'submit_exam', return_value={'status': 'waiting', 'kind': 'exam'}) as submit:
+            self.assertEqual(self.client.post(path, headers=H, json=self.BODY).status_code, 202)
+            submit.assert_called_once_with('강의', 'claude', ['week_01_01'],
+                                           {'mcq': 2, 'ox': 1, 'short': 1, 'essay': 1}, False, '메모')
+        with patch.object(runner, 'submit_exam', side_effect=LayoutError('이미 진행 중')):
+            response = self.client.post(path, headers=H, json=self.BODY)
+            self.assertEqual((response.status_code, response.json()['detail']), (409, '이미 진행 중'))
+        self.assertEqual(self.client.post('/api/local/courses/없는 강의/exams', headers=H, json=self.BODY).status_code, 404)
+
+    def test_list_and_read_exams(self):
+        self.make_course()
+        exams = self.root / 'output' / '강의' / 'exams'
+        exams.mkdir(parents=True)
+        (exams / '20261015-140300.json').write_text(json.dumps(saved_exam(), ensure_ascii=False), encoding='utf-8')
+        (exams / '20261016-090000.json').write_text('{broken', encoding='utf-8')
+        listed = self.client.get('/api/local/courses/강의/exams').json()['exams']
+        self.assertEqual([item['id'] for item in listed], ['20261016-090000', '20261015-140300'])
+        self.assertIn('error', listed[0])
+        exam = self.client.get('/api/local/courses/강의/exams/20261015-140300')
+        self.assertEqual((exam.status_code, exam.json()['id'], exam.json()['questions']), (200, '20261015-140300', questions()))
+        self.assertEqual(self.client.get('/api/local/courses/강의/exams/20261016-090000').status_code, 422)
+        self.assertEqual(self.client.get('/api/local/courses/강의/exams/20991231-000000').status_code, 404)
+        self.assertEqual(self.client.get('/api/local/courses/강의/exams/not-an-id').status_code, 422)
+        self.assertEqual(self.client.get('/api/local/courses/강의/exams', headers={'Host': 'evil.test'}).status_code, 403)
+        self.assertEqual(self.client.get('/api/local/courses/없는 강의/exams').status_code, 404)
 
 
 if __name__ == '__main__':
