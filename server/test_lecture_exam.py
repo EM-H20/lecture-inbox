@@ -1,10 +1,15 @@
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from server.lecture.exam import (exam_problems, exam_prompt, list_exams, note_concepts, parse_response,
                                  read_exam, recent_exams)
+from server.lecture.layout import LayoutError
+from server.lecture.study import ACTIVE, StudyRunner
+from server.lecture_testing import wait_for
 
 NOTE = ('# 강의 — 주제\n\n01주차 01번째 강의 · 교안 A p.1 · 전사 약 00:00:00–00:00:01\n\n'
         '## 핵심 암기사항\n\n요약\n\n## 1. 첫 개념\n\n설명\n\n## 2. 둘째 개념\n\n설명\n\n'
@@ -169,6 +174,154 @@ class ExamStoreTests(ExamRoot):
         retry = exam_prompt('강의', settings, problems=['1번 문제 오류'])
         self.assertIn('거부', retry)
         self.assertIn('- 1번 문제 오류', retry)
+
+
+class ExamRunnerTests(ExamRoot):
+    def setUp(self):
+        super().setUp()
+        self.runner = StudyRunner(self.root)
+        self.binary = self.root / 'agent'
+        self.fake()
+        self.which = patch('server.lecture.study.shutil.which', return_value=str(self.binary))
+        self.which.start()
+
+    def tearDown(self):
+        self.runner.close()
+        self.which.stop()
+        super().tearDown()
+
+    def fake(self, before='', response=None, after=''):
+        response = json.dumps({'questions': questions()}, ensure_ascii=False) if response is None else response
+        self.binary.write_text(f'''#!{sys.executable}
+import json, sys, time
+from pathlib import Path
+args = sys.argv[1:]
+prompt = args[args.index('--print') + 1] if '--mode' in args else sys.stdin.read()
+Path('invocation.json').write_text(json.dumps(dict(args=args, prompt=prompt)))
+{before}
+response = {response!r}
+{after}
+if '-o' in args:
+    Path(args[args.index('-o') + 1]).write_text(response)
+elif '--mode' in args:
+    print(json.dumps(dict(status='SUCCESS', response=response)))
+else:
+    print(json.dumps(dict(result=response, is_error=False)))
+''')
+        self.binary.chmod(0o700)
+
+    def submit(self, agent='claude', **changes):
+        args = dict(stems=['week_01_01'], counts=dict(SETTINGS['counts']), emphasis=True, memo='')
+        args.update(changes)
+        return self.runner.submit_exam('강의', agent, **args)
+
+    def finish(self):
+        self.assertTrue(wait_for(lambda: self.runner.status()['job']['status'] not in ACTIVE))
+        return self.runner.status()['job']
+
+    def saved(self):
+        return sorted(self.exams.glob('*.json')) if self.exams.is_dir() else []
+
+    def test_each_agent_generates_and_publishes_an_exam(self):
+        for agent in ('claude', 'agy', 'codex'):
+            with self.subTest(agent=agent):
+                job = self.submit(agent)
+                self.assertEqual((job['kind'], job['total']), ('exam', 1))
+                job = self.finish()
+                self.assertEqual((job['status'], job['completed'], job['error']), ('done', 1, ''))
+                path = self.exams / f"{job['examId']}.json"
+                exam = json.loads(path.read_text(encoding='utf-8'))
+                self.assertEqual((exam['version'], exam['course'], exam['agent']), (1, '강의', agent))
+                self.assertEqual(exam['settings'], SETTINGS)
+                self.assertEqual(exam['questions'], questions())
+                prompt = json.loads((self.root / 'invocation.json').read_text())['prompt']
+                self.assertIn('output/강의/notes/week_01_01.md', prompt)
+                self.assertIn('출제-지침.md', prompt)
+                path.unlink()
+
+    def test_bad_response_is_retried_with_reasons_then_rejected(self):
+        short = json.dumps({'questions': questions()[:-1]}, ensure_ascii=False)
+        self.fake(after=f"response = response if '거부' in prompt else {short!r}")
+        self.submit()
+        self.assertEqual(self.finish()['status'], 'done')
+        self.assertEqual(len(self.saved()), 1)
+        self.fake(response=short)
+        self.submit()
+        job = self.finish()
+        self.assertEqual(job['status'], 'failed')
+        self.assertIn('서술형 문제 수', job['error'])
+        self.assertEqual(len(self.saved()), 1)
+        self.assertEqual(list(self.exams.glob('.exam-*')), [])
+
+    def test_exam_and_note_jobs_never_run_together_and_cancel_cleans_up(self):
+        (self.root / 'sources' / '강의' / '전사').mkdir(parents=True)
+        (self.root / 'sources' / '강의' / '전사' / 'week_01_01.md').write_text('[00:00:00] 내용')
+        self.fake('time.sleep(30)')
+        job = self.submit()
+        self.assertTrue(wait_for(lambda: (self.root / 'invocation.json').exists()))
+        with self.assertRaises(LayoutError):
+            self.runner.submit('강의', 'claude', ['week_01_01'], replace=True)
+        with self.assertRaises(LayoutError):
+            self.submit()
+        self.runner.cancel(job['id'])
+        job = self.finish()
+        self.assertEqual((job['status'], job['error']), ('cancelled', '시험지 생성을 취소했습니다.'))
+        self.assertEqual(self.saved(), [])
+        self.assertEqual(list(self.exams.glob('.exam-*')), [])
+
+    def test_note_jobs_report_kind_note(self):
+        (self.root / 'sources' / '강의' / '전사').mkdir(parents=True)
+        (self.root / 'sources' / '강의' / '전사' / 'week_01_02.md').write_text('[00:00:00] 내용')
+        self.fake('sys.exit(1)')
+        self.assertEqual(self.runner.submit('강의', 'codex', ['week_01_02'])['kind'], 'note')
+        self.finish()
+
+    def test_invalid_settings_are_rejected_before_any_job(self):
+        counts = SETTINGS['counts']
+        cases = {
+            'no stems': dict(stems=[]),
+            'stem without note': dict(stems=['week_01_02']),
+            'traversal stem': dict(stems=['../notes/week_01_01']),
+            'over per-type limit': dict(counts=dict(counts, mcq=51)),
+            'negative': dict(counts=dict(counts, ox=-1)),
+            'zero total': dict(counts=dict(mcq=0, ox=0, short=0, essay=0)),
+            'over total': dict(counts=dict(mcq=50, ox=11, short=0, essay=0)),
+            'missing type': dict(counts=dict(mcq=1, ox=1, short=1)),
+            'bool count': dict(counts=dict(counts, mcq=True)),
+            'long memo': dict(memo='가' * 201),
+        }
+        for name, changes in cases.items():
+            with self.subTest(name), self.assertRaises(LayoutError):
+                self.submit(**changes)
+        self.assertIsNone(self.runner.status()['job'])
+        with self.assertRaises(LayoutError):
+            self.runner.submit_exam('강의', 'unknown', ['week_01_01'], dict(counts))
+
+    def test_previous_exams_are_offered_to_avoid_repeats(self):
+        for day in range(1, 7):
+            self.write_exam(f'2026100{day}-000000', saved_exam())
+        self.submit()
+        self.assertEqual(self.finish()['status'], 'done')
+        prompt = json.loads((self.root / 'invocation.json').read_text())['prompt']
+        self.assertIn('output/강의/exams/20261006-000000.json', prompt)
+        self.assertIn('output/강의/exams/20261002-000000.json', prompt)
+        self.assertNotIn('output/강의/exams/20261001-000000.json', prompt)
+
+    def test_same_second_ids_never_overwrite(self):
+        self.exams.mkdir(parents=True)
+        existing = self.exams / '20261015-140300.json'
+        existing.write_text('기존')
+        final = self.root / 'final.json'
+        final.write_text('새 시험지')
+        ids = iter(['20261015-140300', '20261015-140301'])
+        with patch('server.lecture.study.time.strftime', side_effect=lambda fmt: next(ids)), \
+                patch('server.lecture.study.time.sleep'):
+            self.assertEqual(StudyRunner._publish(final, self.exams), '20261015-140301')
+        self.assertEqual(existing.read_text(), '기존')
+        with patch('server.lecture.study.time.strftime', return_value='20261015-140300'), \
+                patch('server.lecture.study.time.sleep'), self.assertRaises(RuntimeError):
+            StudyRunner._publish(final, self.exams)
+        self.assertEqual(existing.read_text(), '기존')
 
 
 if __name__ == '__main__':

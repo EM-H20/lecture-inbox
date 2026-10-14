@@ -16,11 +16,20 @@ from pathlib import Path
 from urllib.parse import unquote
 
 from server.lecture.layout import LayoutError, output_dir, safe_course, transcript_dir
+from server.lecture.catalog import STEM
+from server.lecture.exam import (MAX_MEMO, MAX_PER_TYPE, MAX_TOTAL, TYPES, exam_problems, exam_prompt, exams_dir,
+                                 parse_response, recent_exams)
 
 ACTIVE = ("waiting", "running", "cancelling")
 TIMEOUT = 30 * 60  # per agent run
 AGENTS = {"claude": ("Claude", "claude auth login"), "agy": ("Antigravity", "agy"),
           "codex": ("Codex", "codex login")}
+MESSAGES = {
+    "note": {"cancelled": "정리를 취소했습니다.", "timeout": "회차 정리가 30분을 초과했습니다. 다시 시도해 주세요.",
+             "empty": "에이전트가 노트를 반환하지 못했습니다. 로그인·사용량·CLI 버전을 확인해 주세요."},
+    "exam": {"cancelled": "시험지 생성을 취소했습니다.", "timeout": "시험지 생성이 30분을 초과했습니다. 다시 시도해 주세요.",
+             "empty": "에이전트가 시험지를 반환하지 못했습니다. 로그인·사용량·CLI 버전을 확인해 주세요."},
+}
 IMAGE = re.compile(r"!\[[^\]]*\]\(\s*(?:<([^>]+)>|([^)\s]+))")
 log = logging.getLogger("uvicorn.error")
 
@@ -141,15 +150,7 @@ class StudyRunner:
     def submit(self, course, agent, stems, replace=False):
         course = safe_course(course)
         with self.lock:
-            if self.closed:
-                raise LayoutError("서버를 종료하는 중입니다.")
-            if self.job and self.job["status"] in ACTIVE:
-                raise LayoutError("이미 정리 중입니다. 완료하거나 취소한 뒤 다시 시작해 주세요.")
-            if agent not in AGENTS:
-                raise LayoutError("지원하지 않는 에이전트입니다.")
-            binary = shutil.which(agent)
-            if not binary:
-                raise LayoutError(f"{AGENTS[agent][0]} CLI가 필요합니다. 설치 후 `{AGENTS[agent][1]}`으로 로그인해 주세요.")
+            binary = self._claim(agent)
             notes = output_dir(self.root, course) / "notes"
             available = {p.stem: p for p in transcript_dir(self.root, course).glob("week_[0-9][0-9]_[0-9][0-9].md")}
             if not stems:
@@ -160,10 +161,46 @@ class StudyRunner:
             if not replace and any((notes / p.name).exists() for p in lectures):
                 raise LayoutError("이미 노트가 있는 회차가 선택되었습니다. 목록을 새로고침해 주세요. 기존 노트는 덮어쓰지 않습니다.")
             self.cancelled.clear()
-            self.job = {"id": secrets.token_hex(8), "course": course, "agent": agent, "status": "waiting",
+            self.job = {"id": secrets.token_hex(8), "kind": "note", "course": course, "agent": agent, "status": "waiting",
                         "completed": 0, "total": len(lectures), "stems": [p.stem for p in lectures],
                         "stem": "", "error": "", "started": time.time()}
             self.executor.submit(self._run, binary, agent, course, lectures, replace)
+            return dict(self.job)
+
+    def _claim(self, agent):
+        """Checks shared by every job kind; call with the lock held. Returns the agent binary."""
+        if self.closed:
+            raise LayoutError("서버를 종료하는 중입니다.")
+        if self.job and self.job["status"] in ACTIVE:
+            raise LayoutError("이미 노트 정리나 시험지 생성이 진행 중입니다. 완료하거나 취소한 뒤 다시 시작해 주세요.")
+        if agent not in AGENTS:
+            raise LayoutError("지원하지 않는 에이전트입니다.")
+        binary = shutil.which(agent)
+        if not binary:
+            raise LayoutError(f"{AGENTS[agent][0]} CLI가 필요합니다. 설치 후 `{AGENTS[agent][1]}`으로 로그인해 주세요.")
+        return binary
+
+    def submit_exam(self, course, agent, stems, counts, emphasis=True, memo=""):
+        course = safe_course(course)
+        with self.lock:
+            binary = self._claim(agent)
+            notes = output_dir(self.root, course) / "notes"
+            stems = sorted(set(stems))
+            if not stems:
+                raise LayoutError("시험 범위로 회차를 하나 이상 선택해 주세요.")
+            if any(not STEM.match(stem) or not (notes / f"{stem}.md").is_file() for stem in stems):
+                raise LayoutError("노트가 없는 회차가 선택되었습니다. 목록을 새로고침해 주세요.")
+            if set(counts) != set(TYPES) or any(type(counts[kind]) is not int or not 0 <= counts[kind] <= MAX_PER_TYPE
+                                                for kind in TYPES) or not 1 <= sum(counts.values()) <= MAX_TOTAL:
+                raise LayoutError(f"문제 수는 유형마다 0–{MAX_PER_TYPE}개, 합계 1–{MAX_TOTAL}개여야 합니다.")
+            if not isinstance(memo, str) or len(memo) > MAX_MEMO:
+                raise LayoutError(f"추가 요청은 {MAX_MEMO}자 이내로 써 주세요.")
+            settings = {"stems": stems, "counts": {kind: counts[kind] for kind in TYPES},
+                        "emphasis": bool(emphasis), "memo": memo.strip()}
+            self.cancelled.clear()
+            self.job = {"id": secrets.token_hex(8), "kind": "exam", "course": course, "agent": agent, "status": "waiting",
+                        "completed": 0, "total": 1, "stems": stems, "stem": "", "error": "", "started": time.time()}
+            self.executor.submit(self._run_exam, binary, agent, course, settings)
             return dict(self.job)
 
     def cancel(self, job_id):
@@ -236,7 +273,7 @@ class StudyRunner:
                     if not isinstance(text, str):
                         raise ValueError("missing response")
                 except (ValueError, KeyError, TypeError):
-                    raise RuntimeError("에이전트가 노트를 반환하지 못했습니다. 로그인·사용량·CLI 버전을 확인해 주세요.") from None
+                    raise RuntimeError(MESSAGES[self.job["kind"]]["empty"]) from None
                 result.write_text(text, encoding="utf-8")
 
     def _execute(self, binary, agent, prompt, result, stdout):
@@ -247,9 +284,9 @@ class StudyRunner:
             payload = prompt.encode()
             while True:
                 if self.cancelled.is_set():
-                    raise RuntimeError("정리를 취소했습니다.")
+                    raise RuntimeError(MESSAGES[self.job["kind"]]["cancelled"])
                 if time.monotonic() >= deadline:
-                    raise RuntimeError("회차 정리가 30분을 초과했습니다. 다시 시도해 주세요.")
+                    raise RuntimeError(MESSAGES[self.job["kind"]]["timeout"])
                 try:
                     process.communicate(input=payload, timeout=0.25)
                     break
@@ -299,6 +336,57 @@ class StudyRunner:
             status = "cancelled" if self.cancelled.is_set() else "failed"
             message = str(error) if isinstance(error, RuntimeError) else "노트를 저장하지 못했습니다. 기존 노트와 파일 권한을 확인해 주세요."
             log.warning("study job %s ended: %s", self.job["id"], type(error).__name__)
+        finally:
+            with self.lock:
+                self.job.update(status=status, error=message, finished=time.time())
+
+    @staticmethod
+    def _publish(final, exams):
+        """Link the checked exam under a fresh id; an existing file is never replaced."""
+        for _ in range(3):  # ponytail: ids are per second; only back-to-back runs can collide
+            exam_id = time.strftime("%Y%m%d-%H%M%S")
+            try:
+                os.link(final, exams / f"{exam_id}.json")
+                return exam_id
+            except FileExistsError:
+                time.sleep(1)
+        raise RuntimeError("같은 시각에 만든 시험지가 이미 있습니다. 잠시 뒤 다시 시도해 주세요.")
+
+    def _run_exam(self, binary, agent, course, settings):
+        status, message = "done", ""
+        try:
+            exams = exams_dir(self.root, course)
+            exams.mkdir(parents=True, exist_ok=True)
+            previous = recent_exams(self.root, course)
+            with self.lock:
+                if self.cancelled.is_set():
+                    raise RuntimeError(MESSAGES["exam"]["cancelled"])
+                self.job.update(status="running")
+            with tempfile.TemporaryDirectory(prefix=".exam-", dir=exams) as temp:
+                result = Path(temp) / "response.txt"
+                problems = ()
+                for attempt in range(2):  # one retry with the validator's reasons, then give up
+                    result.unlink(missing_ok=True)
+                    self._generate(binary, agent, exam_prompt(course, settings, previous, problems, agent), result)
+                    data, problems = parse_response(result.read_text(encoding="utf-8") if result.is_file() else "")
+                    problems = problems or exam_problems(data, settings, self.root, course)
+                    if not problems:
+                        break
+                    if attempt:
+                        raise RuntimeError("시험지 형식 검사를 통과하지 못했습니다: " + " / ".join(problems[:3]))
+                final = Path(temp) / "exam.json"
+                final.write_text(json.dumps({"version": 1, "course": course, "createdAt": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                                             "agent": agent, "settings": settings, "questions": data["questions"]},
+                                            ensure_ascii=False, indent=1), encoding="utf-8")
+                with self.lock:
+                    if self.cancelled.is_set():
+                        raise RuntimeError(MESSAGES["exam"]["cancelled"])
+                    self.job["examId"] = self._publish(final, exams)
+                    self.job["completed"] = 1
+        except Exception as error:
+            status = "cancelled" if self.cancelled.is_set() else "failed"
+            message = str(error) if isinstance(error, RuntimeError) else "시험지를 저장하지 못했습니다. output 폴더 권한을 확인해 주세요."
+            log.warning("exam job %s ended: %s", self.job["id"], type(error).__name__)
         finally:
             with self.lock:
                 self.job.update(status=status, error=message, finished=time.time())
