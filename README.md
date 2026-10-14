@@ -1,28 +1,68 @@
-# 강의 서랍
+<div align="center">
 
-세종대학교 집현캠퍼스 강의를 내려받고, 강의 영상을 이 컴퓨터에서 Whisper로 전사하고, 교안 PDF와 함께 AI 에이전트가 정리할 수 있게 입력을 준비하는 로컬 도구입니다.
+# 📚 강의 서랍
 
-- 웹 화면·Python 서버·Whisper 전사는 내 컴퓨터에서 실행됩니다. 시험 대비 정리는 선택한 로컬 에이전트 CLI를 통해 AI 서비스를 사용하며, 필요한 교안·전사 내용이 해당 서비스로 전송됩니다.
-- 프론트엔드: React + Vite, 백엔드: FastAPI + ffmpeg. DB 없음.
-- 학교 강의 받기: 학교 비밀번호는 저장하지 않으며, 사용자마다 별도의 학교 쿠키 세션을 메모리에 유지합니다. 영상은 서버 임시 폴더에서 `Content-Disposition: attachment`로 브라우저에 전달합니다.
-- 전사·시험 정리: 영상을 올려 전사하고 `sources/강의이름/전사/`에 저장합니다. 올린 영상은 전사 후 지웁니다.
+**강의 영상 받기 → 내 Mac에서 Whisper 전사 → AI가 시험 대비 노트로 정리**
+
+세종대학교 집현캠퍼스 강의를 내려받고, 이 컴퓨터에서 전사하고, 교안 PDF와 함께 AI 에이전트가 정리하는 로컬 도구
+
+![macOS](https://img.shields.io/badge/macOS-Apple%20Silicon-000000?logo=apple&logoColor=white)
+![Node.js](https://img.shields.io/badge/Node.js-22.12%2B-339933?logo=nodedotjs&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
+![Whisper](https://img.shields.io/badge/Whisper-local-6E40C9)
+![React](https://img.shields.io/badge/React-Vite-61DAFB?logo=react&logoColor=black)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
+
+</div>
+
+## 🚀 한 줄 설치 · 업데이트 (Mac)
+
+터미널(`⌘ + Space` → `터미널` → Enter)을 열고, 설치할 위치(예: `cd ~/Documents`)에서 붙여 넣고 Enter. **아무것도 설치돼 있지 않아도 됩니다.**
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/EM-H20/lecture-inbox/main/install.sh)"
+```
+
+Node.js가 있다면 이 명령도 똑같이 동작합니다. git이 필요해서, 개발자 도구 설치 창이 뜨면 설치한 뒤 다시 실행하세요.
+
+```bash
+npx github:EM-H20/lecture-inbox
+```
+
+설치가 끝나면 실행하고 http://127.0.0.1:4317 을 엽니다.
+
+```bash
+cd lecture-inbox && npm run dev
+```
+
+> **🔄 업데이트도 같은 명령입니다.** `lecture-inbox` 폴더가 있는 위치(또는 그 폴더 안)에서 다시 실행하면 새 코드와 비교해 **바뀐 파일만 덮어쓰고**, 강의 자료·노트·모델(`sources/`·`output/`·`models/`)은 그대로 둡니다. 이미 최신이면 "이미 최신 버전입니다"라고 알려 줍니다. 켜 둔 `npm run dev`는 업데이트 후 껐다 켜세요. git으로 받은 폴더는 덮어쓰지 않으니 `git pull`을 쓰세요.
+
+자세한 설치 과정·권장 사양·문제 해결은 아래 [로컬에서 실행](#-로컬에서-실행)을 보세요.
+
+## ✨ 할 수 있는 것
+
+- **학교 강의 받기** — 학번·학교 비밀번호로 로그인해 과목·강의 목록을 보고 영상을 MP4로 받습니다. 학교 비밀번호는 저장하지 않으며, 사용자마다 별도의 학교 쿠키 세션을 메모리에 유지합니다. 영상은 서버 임시 폴더에서 `Content-Disposition: attachment`로 브라우저에 전달합니다.
+- **Whisper 전사** — 영상을 올리면 이 컴퓨터에서 전사해 `sources/강의이름/전사/`에 저장합니다. 올린 영상은 전사 후 지웁니다.
+- **시험 대비 노트** — 교안 PDF와 전사를 선택한 AI 에이전트(Claude Code / Codex / Antigravity)가 개념·교수님 강조·예상문제로 정리하고, 넓은 읽기 화면·PDF 저장으로 공부합니다.
+
+> 웹 화면·Python 서버·Whisper 전사는 내 컴퓨터에서 실행됩니다. 시험 대비 정리는 선택한 로컬 에이전트 CLI를 통해 AI 서비스를 사용하며, 필요한 교안·전사 내용이 해당 서비스로 전송됩니다. 프론트엔드는 React + Vite, 백엔드는 FastAPI + ffmpeg이고 DB는 없습니다.
 
 현재 구현 범위는 로그인·교과 과목/강의 목록 조회·영상 다운로드, Whisper 전사, 교안 준비, 로컬 에이전트를 통한 시험 대비 노트 생성입니다.
 
-## 폴더 구조
+## 📂 폴더 구조
 
 ```text
 lecture-inbox/
 ├── client/        # React + Vite
 ├── server/        # FastAPI, 전사 파이프라인(server/lecture), 테스트, Python 의존성
 ├── scripts/       # 통합 개발 실행·설치·e2e
-├── install.sh     # 한 줄 설치(Mac): 프로젝트 받기 + setup.sh
+├── install.sh     # 한 줄 설치·업데이트(Mac): 최신 코드 받기 + setup.sh
 ├── setup.sh       # 처음 설치(Mac)
 ├── 정리-지침.md    # AI 에이전트용 정리 지침
 └── package.json   # npm workspace 및 통합 명령
 ```
 
-## 로컬에서 실행
+## 💻 로컬에서 실행
 
 사용자에 맞는 항목을 펼쳐 보세요.
 
@@ -61,11 +101,7 @@ Node.js·Homebrew·git이 **없어도** 됩니다. 이미 설치돼 있으면 �
 
 1. **터미널 열기** — `⌘ + Space` → `터미널` → Enter
 2. **설치 폴더를 둘 위치로 이동** — 예: `cd ~/Documents`
-3. **아래 명령을 붙여 넣고 Enter**
-
-   ```bash
-   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/EM-H20/lecture-inbox/main/install.sh)"
-   ```
+3. **맨 위 [한 줄 설치](#-한-줄-설치--업데이트-mac) 명령을 붙여 넣고 Enter**
 
    현재 위치에 `lecture-inbox` 폴더를 만들어 프로젝트를 받고, 안에서 `setup.sh`를 이어서 실행합니다. `setup.sh`가 하는 일은 이렇습니다.
    - Homebrew → Node.js(22.12 이상), Python(3.10 이상), ffmpeg, whisper-cpp 순서로 **없는 것만** 설치합니다. 시스템에 설치하기 전에는 항상 "설치할까요? (y/N)"로 먼저 묻습니다(`y` 입력 후 Enter).
@@ -87,7 +123,7 @@ Node.js·Homebrew·git이 **없어도** 됩니다. 이미 설치돼 있으면 �
 
    **중간에 실패하거나 멈췄다면** 같은 위치(예: `~/Documents`)에서 같은 명령을 다시 실행하세요. 이미 받은 폴더를 그대로 쓰고 끝난 단계는 건너뜁니다. 처음 실행에는 몇 분이 걸릴 수 있습니다.
 
-   Node.js가 이미 있다면 `npx github:EM-H20/lecture-inbox`로도 같은 설치를 할 수 있습니다.
+   **업데이트**할 때도 같은 위치에서 같은 명령을 실행합니다. 바뀐 코드만 덮어쓰고 `setup.sh`가 새로 필요한 패키지를 설치합니다. 강의 자료·노트·모델은 그대로입니다.
 
 ZIP 파일로 받았다면 압축을 풀고 터미널에서 그 폴더로 이동한 뒤(`cd ` 다음에 폴더를 터미널 창으로 끌어다 놓고 Enter) `bash setup.sh`를 실행하면 같은 설치가 진행됩니다.
 
@@ -106,6 +142,7 @@ npm run dev
 | 증상 | 해결 |
 | --- | --- |
 | `command not found: npx` / `node` | 설치 직후라면 터미널을 닫고 새로 엽니다. 그래도 안 되면 설치 폴더에서 `bash setup.sh`를 다시 실행합니다. |
+| `git으로 받은 폴더입니다` | 그 폴더는 git으로 받아서 설치 명령이 덮어쓰지 않습니다. 폴더에서 `git pull` 후 `bash setup.sh`를 실행하세요. |
 | `command not found: brew` | 설치 폴더에서 `bash setup.sh`를 다시 실행하세요. 그래도 안 되면 터미널을 닫고 새로 엽니다. |
 | `먼저 npm run setup을 실행해 주세요.` | 프로젝트 폴더에서 `bash setup.sh`(또는 `npm run setup`)를 실행합니다. |
 | `address already in use` (4317/4318) | 이전 `npm run dev`가 아직 실행 중입니다. 그 터미널에서 Control+C로 끄세요. |
@@ -153,7 +190,7 @@ npm run dev              # 웹(4317) + API(4318) 동시 실행
 
 </details>
 
-## 사용 방법
+## 📖 사용 방법
 
 1. 화면에서 본인의 학번·학교 비밀번호로 로그인합니다.
 2. 수강 과목을 선택합니다. 연도·학기 필터로 이전 학기 과목도 조회할 수 있습니다. 연도는 현재 연도부터 2003년까지 목록에서 고릅니다.
@@ -163,7 +200,7 @@ npm run dev              # 웹(4317) + API(4318) 동시 실행
 
 학교 로그인·목록 조회·다운로드는 실제 계정으로 아직 검증하지 않았습니다. 목록은 원본 저장소의 교과 조회 페이지(`/local/ubion/user/index.php`)와 동영상 항목 구조를 기준으로 구현했으며, 비교과 목록 조회는 포함하지 않습니다. 조회 실패·학교 로그인 만료는 빈 목록과 구분해 안내합니다. 학교 세션 만료 안내만으로 준비된 파일을 삭제하지 않으며, 재연결 전 받을 파일은 먼저 다운로드하세요. 연결이 실패하면 학교 TLS/로그인 변경 여부를 확인해야 합니다. 인증서 검증을 끄거나 비밀번호를 소스에 넣지 마세요.
 
-## 강의 전사와 교안 정리 (화면 / 명령줄)
+## 🎙️ 강의 전사와 교안 정리 (화면 / 명령줄)
 
 영상·음성 파일을 이 컴퓨터에서 전사하고, 교안 PDF와 함께 AI 에이전트(Claude Code, Antigravity CLI, Codex CLI)가 정리할 수 있게 입력을 준비합니다. 앱은 AI API를 직접 호출하지 않고 설치된 CLI를 실행합니다. 각 CLI의 로그인·모델 설정·사용 한도가 적용됩니다.
 
@@ -236,7 +273,7 @@ npm run lecture -- transcribe ~/Downloads/강의.mp4 --course 자료구조 --wee
 
 정리는 한 번에 한 작업만 실행하고 에이전트 실행 한 번의 제한 시간은 30분입니다. 어느 에이전트든 같은 형식이 되도록 서버가 노트를 `정리-지침.md`의 ‘형식 검사’로 확인합니다. 통과하지 못하면 이유를 알려 주고 한 번 다시 쓰게 하며, 그래도 실패하면 저장하지 않습니다. 기존 노트는 덮어쓰지 않습니다. 실패·취소 시 이미 완성된 회차는 남고, 미완성 회차는 저장하지 않아 다시 시작할 수 있습니다. 서버를 종료하면 진행 중인 에이전트와 하위 프로세스도 종료됩니다. 작업 상태는 메모리에만 남지만 완성 노트는 재시작 후에도 표시됩니다. 내려받은 Markdown의 교안 이미지 상대경로는 프로젝트의 원래 `notes/` 위치를 기준으로 합니다.
 
-## 동작 원리
+## ⚙️ 동작 원리
 
 브라우저 화면(React, 4317)은 모든 요청을 로컬 API(FastAPI, 4318)로 보내고, 학교 사이트·ffmpeg·Whisper·AI 에이전트 CLI는 로컬 API만 호출합니다. 학교 강의 받기 흐름은 [`docs/school-download-flow.html`](docs/school-download-flow.html)을 브라우저로 열면 다이어그램으로 볼 수 있습니다.
 
@@ -320,7 +357,7 @@ flowchart LR
 
 `/api/local/*` 경로는 `Host`가 로컬 주소인 요청만 받고, 쓰기 요청(POST·PUT·DELETE)에는 화면이 붙이는 확인 헤더가 있어야 합니다.
 
-## 세션·보관 동작
+## 🔒 세션·보관 동작
 
 - 애플리케이션 세션은 기본 2시간, 준비된 파일은 기본 30분 유지됩니다. 학교 세션이 더 먼저 만료될 수 있습니다.
 - 학교 비밀번호는 로그인 요청에서만 사용합니다. API 세션 토큰은 브라우저의 해당 탭 `sessionStorage`에, 학교 쿠키는 서버 메모리에만 있습니다.
@@ -331,18 +368,19 @@ flowchart LR
 - 원본 레포의 낮은 TLS 보안 수준 호환 어댑터는 포함하지 않았습니다. 학교와 CDN 모두 정상 인증서 검증을 유지합니다.
 - Whisper 전사에는 요약·화자 분리가 없습니다. 시험 대비 요약은 별도의 에이전트 정리 작업입니다.
 
-## 검증
+## ✅ 검증
 
 ```bash
 npm test        # 백엔드 + 클라이언트 테스트
 npm run build   # 프론트엔드 빌드
 npm run e2e     # 실제 Whisper까지 포함한 전체 흐름 (모델 필요)
+bash scripts/check-install.sh  # 한 줄 설치·업데이트 동작 (임시 폴더, 네트워크 없이)
 ```
 
 테스트에서는 학교 로그인과 CDN을 모의 처리합니다. 과목·강의 HTML 파싱, 필터 검증, 사용자별 목록 세션, 조회 중 로그아웃, 학교 만료 응답, 선택한 강의의 다운로드 작업 연결, 두 사용자 간 격리, 비밀번호 오류 응답 비노출, 로그인 시도 제한, 1회용 링크, 만료/로그아웃 후 접근 차단, 전송 중 정리, 403 Referer 재시도, 불완전 파일 정리를 검증합니다.
 모의 API를 연결한 브라우저에서 과목 선택·영상 준비 요청, 과목 변경 시 오래된 응답 무시, 오류 후 재시도, 빈 목록, 모바일·데스크톱 화면을 확인했습니다. 실제 학교 로그인/영상 다운로드는 별도 검증이 필요합니다.
 
-## 참고한 코드
+## 🙏 참고한 코드
 
 - [chuseok22-home-server downloader.py](https://github.com/Chuseok22/chuseok22-home-server/blob/main/apps/sejong/lecture/services/downloader.py): HLS → MP4 무재인코딩 저장 및 Referer 재시도 흐름
 - [ecampus_auth.py](https://github.com/Chuseok22/chuseok22-home-server/blob/main/apps/sejong/lecture/services/ecampus_auth.py): 학교 로그인 폼과 로그인 성공 판정
