@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import CoursePicker from './CoursePicker.jsx';
 import LectureFields from './LectureFields.jsx';
 import Study from './Study.jsx';
+import Exam from './Exam.jsx';
 import {
   JOB_LABELS, canStartTranscription, documentPath, effectiveForce, findLecture, formatElapsed, formatSize, isActive,
   isLectureNumber, lectureLabel, localFetch, stemOf, uploadFile,
@@ -221,6 +222,7 @@ export default function Transcribe({ active }) {
         </div>
       </details>
       <Study key={selected.name} course={selected} active={active} reloadCourses={reloadCourses} preparing={Boolean(pdfBatch)} />
+      <Exam key={`exam:${selected.name}`} course={selected} active={active} />
     </div> : null}
 
     <section className="panel files">

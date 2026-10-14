@@ -58,6 +58,7 @@ export default function Study({ course, active, reloadCourses, preparing }) {
   }, [course.name, resource, active]);
 
   const job = state?.job;
+  const noteJob = job?.kind === 'exam' ? null : job;  // exam jobs report in the 모의고사 panel; both still share one lock
   const locked = busy(job) || sending;
   const selectedAgent = state?.agents.find((item) => item.id === agent);
   const pending = course.lectures.filter((item) => !item.hasNote);
@@ -68,7 +69,7 @@ export default function Study({ course, active, reloadCourses, preparing }) {
   const stem = resource.split('/')[1];
   const isNote = resource.startsWith('notes/');
   const ready = state?.selectionSupported && selectedAgent?.available && selected.length > 0 && !locked && !preparing;
-  const next = preparing ? '교안 준비가 끝나면 시작할 수 있어요.' : busy(job) ? '진행 중인 정리를 완료하거나 취소해 주세요.'
+  const next = preparing ? '교안 준비가 끝나면 시작할 수 있어요.' : busy(job) ? (job.kind === 'exam' ? '시험지를 만드는 중입니다. 끝나거나 취소한 뒤 정리할 수 있어요.' : '진행 중인 정리를 완료하거나 취소해 주세요.')
     : !selected.length ? '먼저 정리할 회차를 선택해 주세요.' : !selectedAgent ? '이어서 정리할 에이전트를 선택해 주세요.'
       : `${selected.length}개 회차를 ${selectedAgent.label}로 정리합니다.${replacing ? ` 노트가 있는 ${replacing}개는 새 노트로 바뀌고, 이전 노트는 output/${course.name}/notes/.history에 보관됩니다.` : ''}`;
 
@@ -102,7 +103,7 @@ export default function Study({ course, active, reloadCourses, preparing }) {
       <h2>{allComplete ? '시험 대비 노트' : '시험 대비 노트 만들기'}</h2>
       <p>{allComplete ? '노트를 열어 핵심을 읽고, 문제로 확인하세요.' : course.lectures.length ? '강의를 선택하면 전사 내용과 관련 교안으로 정리합니다.' : '영상 전사가 끝나면 이곳에서 노트를 만들 수 있습니다.'}</p>
     </header>
-    {job && (busy(job) || job.course === course.name) ? <div className={`study-progress ${busy(job) ? 'is-running' : 'is-history'}`} data-status={job.status} role="status">
+    {noteJob && (busy(noteJob) || noteJob.course === course.name) ? <div className={`study-progress ${busy(job) ? 'is-running' : 'is-history'}`} data-status={job.status} role="status">
       <div className="viewer-head"><strong>{!busy(job) ? <span className="study-history-label">최근 작업</span> : null}{job.course} · {state.agents?.find((item) => item.id === job.agent)?.label} · <span className="study-job-status">{labels[job.status]}</span></strong>
         {busy(job) ? <button className="text-button" disabled={job.status === 'cancelling'} onClick={cancel}>정리 취소</button> : null}</div>
       {busy(job) ? <progress aria-label="노트 저장 진행률" value={job.completed} max={job.total} /> : null}

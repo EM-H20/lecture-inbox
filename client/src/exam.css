@@ -1,0 +1,43 @@
+.exam input[type="checkbox"], .exam input[type="radio"], .exam-sheet input[type="radio"] { display: inline-block; width: 18px; height: 18px; min-height: 18px; padding: 0; margin: 3px 0 0; accent-color: var(--color-accent); flex-shrink: 0; }
+.exam h3 { font-size: 16px; font-weight: 600; margin: 0 0 12px; }
+.exam-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--color-border); }
+.exam-list li { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--color-border); }
+.exam-list li > span:first-child { display: grid; gap: 4px; min-width: 0; }
+.exam-list small, .exam-option small, .exam-counts legend span { color: var(--color-muted); font-size: 13px; font-weight: 400; }
+.exam-actions { display: flex; gap: 12px; align-items: center; flex-shrink: 0; }
+.exam-range, .exam-counts { border: 0; padding: 0; margin: 0 0 20px; min-width: 0; }
+.exam-range legend, .exam-counts legend { font-size: 15px; font-weight: 600; margin-bottom: 10px; padding: 0; }
+.exam-quick { display: flex; flex-wrap: wrap; gap: 8px; }
+.exam-lectures { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 12px; font-size: 14px; }
+.exam-lectures label, .exam-option { display: inline-flex; gap: 8px; align-items: start; margin: 0; }
+/* style.css gives every label a 20px top margin and 13px text; choice rows and checkboxes reset it */
+.exam-counts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.exam-counts legend { grid-column: 1 / -1; }
+.exam-counts label, .exam-memo { display: grid; gap: 6px; font-size: 14px; }
+.exam-option { flex-wrap: wrap; font-size: 14px; margin-bottom: 16px; }
+.exam-memo { margin-bottom: 24px; }
+.exam-body { max-width: 800px; margin: 0 auto; padding: 24px 24px 64px; }
+.exam-type { font-size: 18px; font-weight: 600; margin: 32px 0 0; }
+.exam-question { padding: 20px 0 20px 12px; border-bottom: 1px solid var(--color-border); border-left: 3px solid transparent; }
+.exam-question.is-correct { border-left-color: var(--color-smoke); }
+.exam-question.is-wrong { border-left-color: var(--color-accent); }
+.exam-question h3 { font-size: 16px; font-weight: 600; margin: 0 0 12px; line-height: 1.6; }
+.exam-choices { display: grid; gap: 10px; }
+.exam-choices.exam-ox { grid-template-columns: repeat(2, max-content); gap: 32px; }
+.exam-choices label { display: flex; gap: 8px; align-items: start; cursor: pointer; line-height: 1.5; margin: 0; font-size: 15px; }
+.exam-choices label.is-answer { font-weight: 600; }
+.exam-input { width: 100%; font: inherit; }
+textarea.exam-input { min-height: 96px; padding: 12px 14px; border: 1px solid var(--color-smoke); border-radius: var(--radius-input); background: var(--color-surface); color: var(--color-ink); }
+.exam-review { margin-top: 12px; font-size: 14px; display: grid; gap: 6px; line-height: 1.6; }
+.exam-review p, .exam-points { margin: 0; }
+.exam-verdict { font-weight: 600; }
+.exam-mark, .exam-filter { display: flex; flex-wrap: wrap; gap: 8px; }
+.exam-mark button, .exam-filter button { border: 1px solid var(--color-smoke); background: var(--color-surface); padding: 6px 12px; }
+.exam-mark button[aria-pressed="true"], .exam-filter button[aria-pressed="true"] { border-color: var(--color-accent); color: var(--color-accent); font-weight: 600; }
+.exam-score { position: sticky; top: 0; z-index: 1; display: grid; gap: 8px; padding: 12px 16px; background: var(--color-surface); border: 1px solid var(--color-border); }
+.exam-submit { margin-top: 32px; display: flex; justify-content: end; }
+@media (max-width: 640px) {
+  .exam-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .exam-list li { flex-direction: column; align-items: start; }
+  .exam-body { padding: 16px 16px 48px; }
+}
