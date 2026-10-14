@@ -59,7 +59,7 @@ export default function Exam({ course, active }) {
   const selectedAgent = state?.agents.find((item) => item.id === agent);
   const ready = stems.length > 0 && parsed && selectedAgent?.available && !locked;
   const agentLabel = (id) => state?.agents.find((item) => item.id === id)?.label ?? id;
-  const next = busy(job) ? (job.kind === 'exam' ? '시험지를 만드는 중입니다.' : '진행 중인 노트 정리를 완료하거나 취소해 주세요.')
+  const next = busy(job) ? (job.kind === 'exam' ? (examJob ? '시험지를 만드는 중입니다.' : `${job.course} 강의에서 시험지를 만드는 중입니다.`) : '진행 중인 노트 정리를 완료하거나 취소해 주세요.')
     : !stems.length ? '시험 범위로 회차를 선택해 주세요.'
       : !parsed ? '문제 수는 유형마다 0–50개, 합계 1–60개로 정해 주세요.'
         : !selectedAgent ? '시험지를 만들 AI를 선택해 주세요.'
