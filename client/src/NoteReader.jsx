@@ -114,14 +114,22 @@ function PrintNote({ document, course, load }) {
   </div>;
 }
 
-function ReadingContent({ document, course, loadTranscript }) {
+function ReadingContent({ document, course, loadTranscript, concept }) {
   const summaries = document.sections.filter((section) => section.kind === 'summary');
   const emphases = document.sections.filter((section) => section.kind === 'emphasis');
   const concepts = document.sections.filter((section) => section.kind === 'concept');
   const uncertain = document.sections.filter((section) => section.kind === 'uncertain');
-  const [mode, setMode] = useState(summaries.length ? 'summary' : 'all');
+  // Opened from a mock-exam source link: start on that concept; a number the note no longer has falls back.
+  const focus = concept ? concepts.find((section) => parseInt(section.title, 10) === concept) : null;
+  const [mode, setMode] = useState(focus ? 'concept' : summaries.length ? 'summary' : 'all');
   const [drafts, setDrafts] = useState({});
   const heading = useRef(null);
+  useEffect(() => {
+    if (!focus) return;
+    const target = window.document.getElementById(focus.id);
+    target?.focus({ preventScroll: true });
+    target?.scrollIntoView({ block: 'start' });
+  }, []);  // only when the reader opens
   const modes = [
     { id: 'summary', label: '핵심 훑기', hint: '먼저 기억할 내용', available: summaries.length > 0 },
     { id: 'emphasis', label: '교수님 강조', hint: '외울 것·안 외울 것', available: emphases.length > 0 },
@@ -178,7 +186,7 @@ function ReadingContent({ document, course, loadTranscript }) {
   </div>;
 }
 
-export default function NoteReader({ course, stem, onClose }) {
+export default function NoteReader({ course, stem, onClose, concept }) {
   const dialog = useRef(null);
   const opener = useRef(window.document.activeElement);
   const [document, setDocument] = useState(null);
@@ -299,7 +307,7 @@ export default function NoteReader({ course, stem, onClose }) {
     {error ? <div className="note-loading"><p className="message error" role="alert">{error}</p><button className="primary" onClick={() => setAttempt((value) => value + 1)}>다시 불러오기</button></div>
       : !document ? <p className="note-loading" role="status">노트를 불러오는 중…</p>
         : editing ? <NoteEditor course={course} draft={draft} setDraft={setDraft} saving={saving} preview={<NoteMarkdown text={draft} course={course} />} />
-        : <ReadingContent document={document} course={course} loadTranscript={loadTranscript} />}
+        : <ReadingContent document={document} course={course} loadTranscript={loadTranscript} concept={concept} />}
   </dialog>
   {document && !editing ? <PrintNote document={document} course={course} load={loadTranscript} /> : null}
   </>, window.document.body);
