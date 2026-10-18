@@ -30,6 +30,15 @@ export async function localFetch(path, { method = 'GET', json, body, headers = {
 }
 
 // fetch() cannot report upload progress, so uploads use XMLHttpRequest. send(file) streams from disk.
+// Deletes one at a time so a failure stops nothing else; returns the error messages.
+export async function deleteEach(paths) {
+  const failed = [];
+  for (const path of paths) {
+    try { await localFetch(path, { method: 'DELETE' }); } catch (e) { failed.push(e.message); }
+  }
+  return failed;
+}
+
 export function uploadFile(path, file, { headers = {}, onProgress, onSent, signal } = {}, XHR = XMLHttpRequest) {
   return new Promise((resolve, reject) => {
     const request = new XHR();

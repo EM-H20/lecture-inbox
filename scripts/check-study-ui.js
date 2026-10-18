@@ -6,6 +6,7 @@ async (page) => {
   let job = null, submissions = [], fail = true, empty = false, selectionSupported = true;
   let courseNames = ['시험강의', '다른강의'];
   const saved = new Set(['week_04_01']);
+  const noteDeletes = [];
   const agents = [
     { id: 'claude', label: 'Claude', available: true, login: 'claude auth login' },
     { id: 'agy', label: 'Antigravity', available: false, login: 'agy' },
@@ -38,6 +39,12 @@ async (page) => {
       if (path.startsWith('/api/local/study/') && method === 'DELETE') {
         job = { ...job, status: 'cancelled' };
         return route.fulfill({ json: job });
+      }
+      if (path.includes('/notes/') && method === 'DELETE') {
+        const stem = path.split('/').at(-1);
+        noteDeletes.push(stem);
+        saved.delete(stem);
+        return route.fulfill({ json: { ok: true } });
       }
       if (path.includes('/notes/')) {
         if (path.includes('시험강의')) await new Promise(resolve => setTimeout(resolve, 500));
@@ -148,6 +155,19 @@ async (page) => {
     await start.click();
     check(submissions.at(-1).replace === true && submissions.at(-1).stems.join(',') === 'week_01_01', 'Re-summarizing must replace only the chosen note');
     job = null;
+    // 노트 삭제 asks in a modal; 취소 keeps the note, and checked lectures can be deleted together.
+    const confirmBox = p.getByRole('dialog', { name: /노트.*삭제할까요/ });
+    const removeNotes = section.getByRole('button', { name: /선택한 노트.*삭제/ });
+    await section.getByRole('checkbox', { name: '4주차 1번째 강의 다시 정리 선택' }).check();
+    await removeNotes.click();
+    await confirmBox.getByRole('button', { name: '취소' }).click();
+    await confirmBox.waitFor({ state: 'detached' });
+    check(noteDeletes.length === 0, 'Cancel must not delete a note');
+    await section.getByRole('checkbox', { name: '1주차 1번째 강의 다시 정리 선택' }).check();
+    await removeNotes.click();
+    await confirmBox.getByRole('button', { name: '삭제', exact: true }).click();
+    await section.getByRole('checkbox', { name: '4주차 1번째 강의 선택' }).waitFor();
+    check(noteDeletes.includes('week_01_01') && noteDeletes.includes('week_04_01'), `Bulk note delete: ${noteDeletes}`);
     empty = true;
     await p.getByRole('tab', { name: '학교 강의 받기' }).click();
     await p.getByRole('tab', { name: '전사·시험 정리' }).click();

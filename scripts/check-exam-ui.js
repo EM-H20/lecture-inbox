@@ -22,7 +22,7 @@ async (page) => {
   let job = null;
   const posts = [];
   const deletes = [];
-  let listed = true;
+  let listed = [exam.id];
   const agents = [{ id: 'claude', label: 'Claude', available: true, login: 'claude auth login' }];
   p.on('dialog', (dialog) => dialog.accept());  // window.confirm prompts (grade with blanks, close with answers)
   try {
@@ -42,12 +42,14 @@ async (page) => {
         job = { id: 'abcdef0123456789', kind: 'exam', course: '시험강의', agent: 'claude', status: 'running', completed: 0, total: 1, stems: [], stem: '', error: '', elapsedSeconds: 5 };
         return route.fulfill({ status: 202, json: job });
       }
-      if (path.endsWith(`/exams/${exam.id}`) && method === 'DELETE') {
-        deletes.push(path);
-        listed = false;
+      if (path.includes('/exams/') && method === 'DELETE') {
+        const id = path.split('/').at(-1);
+        deletes.push(id);
+        listed = listed.filter((value) => value !== id);
         return route.fulfill({ json: { ok: true } });
       }
-      if (path.endsWith('/exams')) return route.fulfill({ json: { exams: listed ? [{ id: exam.id, createdAt: exam.createdAt, agent: 'claude', settings: exam.settings }] : [] } });
+      if (path.endsWith('/exams')) return route.fulfill({ json: { exams: listed.map((id) => (id === exam.id
+        ? { id, createdAt: exam.createdAt, agent: 'claude', settings: exam.settings } : { id, error: '읽을 수 없는 시험지입니다.' })) } });
       if (path.endsWith(`/exams/${exam.id}`)) return route.fulfill({ json: exam });
       if (path.includes('/notes/')) return route.fulfill({ json: { stem: 'week_01_01', text: note } });
       if (path.includes('/transcripts/')) return route.fulfill({ json: { stem: 'week_01_01', text: '[00:00:00] 내용' } });
@@ -137,17 +139,24 @@ async (page) => {
     await sheet.getByRole('button', { name: '닫기' }).click();
     await sheet.waitFor({ state: 'detached' });
 
-    // 삭제 asks in a modal first: 취소 keeps the exam, 삭제 removes it and refreshes the list.
-    await panel.getByRole('button', { name: /시험지 삭제/ }).click();
+    // 삭제 asks in a modal first: 취소 keeps the exam; a checked selection is deleted together.
+    listed = [exam.id, '20261016-090000'];
+    await p.getByRole('tab', { name: '학교 강의 받기' }).click();
+    await p.getByRole('tab', { name: '전사·시험 정리' }).click();
+    const removeChecked = panel.getByRole('button', { name: /선택한 시험지.*삭제/ });
+    await panel.getByRole('checkbox', { name: /16일 09:00 시험지 선택/ }).waitFor();
+    check(await removeChecked.isDisabled(), 'Delete is disabled until an exam is checked');
+    await panel.getByRole('checkbox', { name: /15일 14:03 시험지 선택/ }).check();
+    await removeChecked.click();
     const confirmBox = p.getByRole('dialog', { name: '시험지를 삭제할까요?' });
-    await confirmBox.waitFor();
     await confirmBox.getByRole('button', { name: '취소' }).click();
     await confirmBox.waitFor({ state: 'detached' });
     check(deletes.length === 0, 'Cancel does not delete');
-    await panel.getByRole('button', { name: /시험지 삭제/ }).click();
-    await confirmBox.getByRole('button', { name: '삭제', exact: true }).click();
+    await panel.getByRole('button', { name: '전체 선택', exact: true }).click();
+    await panel.getByRole('button', { name: '선택한 시험지 2개 삭제' }).click();
+    await p.getByRole('dialog', { name: '시험지 2개를 삭제할까요?' }).getByRole('button', { name: '삭제', exact: true }).click();
     await panel.getByText(/아직 만든 시험지가 없어요/).waitFor();
-    check(deletes.length === 1 && deletes[0].endsWith(`/exams/${exam.id}`), `DELETE sent: ${deletes}`);
+    check(deletes.sort().join() === `${exam.id},20261016-090000`, `DELETE sent: ${deletes}`);
   } finally {
     await context.close();
   }

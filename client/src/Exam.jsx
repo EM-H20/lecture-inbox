@@ -1,5 +1,6 @@
 import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import { formatElapsed, localFetch } from './localApi.js';
+import { deleteEach, formatElapsed, localFetch } from './localApi.js';
+import ConfirmDialog from './ConfirmDialog.jsx';
 import { DEFAULT_COUNTS, TYPES, TYPE_LABELS, countsLabel, examTime, handoutStems, parseCounts, rangeSummary, weekStems } from './examSession.js';
 import './exam.css';
 const ExamSheet = lazy(() => import('./ExamSheet.jsx'));
@@ -19,9 +20,9 @@ export default function Exam({ course, active }) {
   const [agent, setAgent] = useState('');
   const [sending, setSending] = useState(false);
   const [open, setOpen] = useState('');
+  const [checked, setChecked] = useState([]);
   const [removing, setRemoving] = useState(null);
   const [deleting, setDeleting] = useState(false);
-  const confirmBox = useRef(null);
   const seen = useRef('');
   const form = useRef(null);
   const url = `/api/local/courses/${encodeURIComponent(course.name)}/exams`;
@@ -33,7 +34,6 @@ export default function Exam({ course, active }) {
   }, [url]);
 
   useEffect(() => { if (active) loadExams(); }, [active, loadExams]);
-  useEffect(() => { if (removing) confirmBox.current?.showModal(); }, [removing]);
 
   useEffect(() => {
     if (!active) return undefined;
@@ -89,10 +89,16 @@ export default function Exam({ course, active }) {
 
   async function remove() {
     setDeleting(true);
-    try { await localFetch(`${url}/${removing.id}`, { method: 'DELETE' }); await loadExams(); }
-    catch (e) { setListError(e.message); }
-    finally { setDeleting(false); setRemoving(null); }
+    const failed = await deleteEach(removing.map((item) => `${url}/${item.id}`));
+    await loadExams();
+    if (failed.length) setListError(`${failed.length}개를 지우지 못했습니다: ${failed[0]}`);
+    setChecked((current) => current.filter((id) => !removing.some((item) => item.id === id)));
+    setDeleting(false);
+    setRemoving(null);
   }
+  const checkedExams = exams?.filter((item) => checked.includes(item.id)) ?? [];
+  const allChecked = Boolean(exams?.length) && checkedExams.length === exams.length;
+  const examName = (item) => item.error ? examTime(item.id) : `${rangeSummary(item.settings.stems, course.lectures)} · ${examTime(item.id)}`;
 
   function reuse(settings) {
     setStems(settings.stems.filter((stem) => noted.some((lecture) => lecture.stem === stem)));
@@ -123,13 +129,18 @@ export default function Exam({ course, active }) {
       <h3>내 시험지</h3>
       {listError ? <p className="message error" role="alert">{listError}</p> : null}
       {exams && !exams.length ? <p className="hint">아직 만든 시험지가 없어요. 아래에서 범위와 문제 수를 정해 만들어 보세요.</p> : null}
+      {exams?.length ? <div className="selection-toolbar"><span>{checked.length ? `${checkedExams.length}개 선택` : `시험지 ${exams.length}개`}</span>
+        <span className="exam-actions">
+          <button className="text-button" onClick={() => setChecked(allChecked ? [] : exams.map((item) => item.id))}>{allChecked ? '선택 해제' : '전체 선택'}</button>
+          <button className="text-button danger" disabled={!checkedExams.length} onClick={() => setRemoving(checkedExams)}>{checkedExams.length ? `선택한 시험지 ${checkedExams.length}개 삭제` : '선택한 시험지 삭제'}</button>
+        </span></div> : null}
       {exams?.length ? <ul className="exam-list">{exams.map((item) => <li key={item.id}>
-        {item.error ? <><span><strong>{examTime(item.id)}</strong><small>{item.error}</small></span>
-          <span className="exam-actions"><button className="text-button exam-delete" onClick={() => setRemoving(item)}>삭제</button></span></> : <>
+        <input type="checkbox" aria-label={`${examTime(item.id)} 시험지 선택`} checked={checked.includes(item.id)}
+          onChange={() => setChecked((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])} />
+        {item.error ? <span><strong>{examTime(item.id)}</strong><small>{item.error}</small></span> : <>
           <span><strong>{rangeSummary(item.settings.stems, course.lectures)}</strong>
             <small>{examTime(item.id)} · {countsLabel(item.settings.counts)} · {agentLabel(item.agent)}</small></span>
           <span className="exam-actions">
-            <button className="text-button exam-delete" aria-label={`${examTime(item.id)} 시험지 삭제`} onClick={() => setRemoving(item)}>삭제</button>
             <button className="text-button" disabled={locked} onClick={() => reuse(item.settings)}>같은 설정으로 다시 만들기</button>
             <button className="secondary" aria-label={`${examTime(item.id)} 시험지 풀기`} onClick={() => setOpen(item.id)}>풀기</button>
           </span></>}
@@ -168,15 +179,10 @@ export default function Exam({ course, active }) {
         <button className="primary" aria-describedby="exam-next" disabled={!ready} onClick={start}>{sending ? '시작하는 중…' : '시험지 만들기'}</button></div>
       <p className="study-disclosure">선택한 회차의 정리 노트와 최근 시험지 5개가 해당 AI 서비스로 전송되며, 계정의 사용 한도가 적용됩니다.</p>
     </div>
-    {removing ? <dialog className="exam-confirm" ref={confirmBox} aria-labelledby="exam-confirm-title"
-      onCancel={(event) => { event.preventDefault(); if (!deleting) setRemoving(null); }}>
-      <h3 id="exam-confirm-title">시험지를 삭제할까요?</h3>
-      <p>{removing.error ? examTime(removing.id) : `${rangeSummary(removing.settings.stems, course.lectures)} · ${examTime(removing.id)}`} 시험지를 지웁니다. 삭제하면 되돌릴 수 없어요.</p>
-      <div className="exam-confirm-actions">
-        <button className="secondary" autoFocus disabled={deleting} onClick={() => setRemoving(null)}>취소</button>
-        <button className="primary exam-delete-confirm" disabled={deleting} onClick={remove}>{deleting ? '삭제하는 중…' : '삭제'}</button>
-      </div>
-    </dialog> : null}
+    {removing ? <ConfirmDialog title={removing.length > 1 ? `시험지 ${removing.length}개를 삭제할까요?` : '시험지를 삭제할까요?'}
+      busy={deleting} onConfirm={remove} onCancel={() => setRemoving(null)}>
+      {removing.length > 1 ? `선택한 시험지 ${removing.length}개를` : `${examName(removing[0])} 시험지를`} 지웁니다. 삭제하면 되돌릴 수 없어요.
+    </ConfirmDialog> : null}
     {open ? <Suspense fallback={<p role="status">시험지를 여는 중…</p>}>
       <ExamSheet key={open} course={course.name} id={open} lectures={course.lectures} onClose={() => setOpen('')} /></Suspense> : null}
   </section>;

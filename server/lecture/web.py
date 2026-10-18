@@ -274,6 +274,20 @@ def create_router() -> APIRouter:
                         temporary.unlink(missing_ok=True)
         return {"stem": stem, "text": body.text}
 
+    @router.delete("/courses/{course}/notes/{stem}")
+    def remove_note(request: Request, course: str = PathParam(min_length=1, max_length=100),
+                    stem: str = PathParam(pattern=r"^week_[0-9]{2}_[0-9]{2}$"),
+                    transcriber: Transcriber = Depends(get_transcriber)):
+        with note_lock:
+            note_path(transcriber, course, stem)  # 404 for a missing note or one that is a symlink
+            try:
+                if not request.app.state.study.archive_note(course, stem):
+                    raise HTTPException(404, "정리 노트를 찾을 수 없습니다.")
+            except LayoutError as error:
+                raise HTTPException(409, str(error)) from None
+        write_work_order(transcriber.root, course)
+        return {"ok": True}
+
     @router.get("/courses/{course}/pages")
     def page_catalog(course: str = PathParam(min_length=1, max_length=100),
                      transcriber: Transcriber = Depends(get_transcriber)):

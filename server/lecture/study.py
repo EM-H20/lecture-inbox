@@ -203,6 +203,20 @@ class StudyRunner:
             self.executor.submit(self._run_exam, binary, agent, course, settings)
             return dict(self.job)
 
+    def archive_note(self, course, stem):
+        """Deletes a note by moving it to notes/.history, as re-summarizing does; False when there is none."""
+        notes = output_dir(self.root, safe_course(course)) / "notes"
+        with self.lock:  # a running job may read or publish this note
+            if self.job and self.job["status"] in ACTIVE:
+                raise LayoutError("노트 정리나 시험지 생성이 진행 중입니다. 끝나거나 취소한 뒤 삭제해 주세요.")
+            target = notes / f"{stem}.md"
+            if not target.is_file():
+                return False
+            history = notes / ".history"
+            history.mkdir(exist_ok=True)
+            os.replace(target, history / f"{stem}-{time.strftime('%Y%m%d-%H%M%S')}.md")
+            return True
+
     def cancel(self, job_id):
         with self.lock:
             if not self.job or self.job["id"] != job_id:

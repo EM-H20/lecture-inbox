@@ -1,5 +1,6 @@
 import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { formatElapsed, lectureLabel, localFetch } from './localApi.js';
+import { deleteEach, formatElapsed, lectureLabel, localFetch } from './localApi.js';
+import ConfirmDialog from './ConfirmDialog.jsx';
 const NoteReader = lazy(() => import('./NoteReader.jsx'));
 
 // A selection is tied to the note state it was made in: a lecture whose note appears meanwhile is not silently re-summarized.
@@ -17,6 +18,8 @@ export default function Study({ course, active, reloadCourses, preparing }) {
   const [resource, setResource] = useState('');
   const [note, setNote] = useState(null);
   const [noteError, setNoteError] = useState('');
+  const [removing, setRemoving] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const completed = useRef('');
   const submitting = useRef(false);
   const viewer = useRef(null);
@@ -64,7 +67,8 @@ export default function Study({ course, active, reloadCourses, preparing }) {
   const pending = course.lectures.filter((item) => !item.hasNote);
   const allComplete = course.lectures.length > 0 && pending.length === 0 && !busy(job);
   const selected = course.lectures.filter((item) => selection.includes(pick(item)));
-  const replacing = selected.filter((item) => item.hasNote).length;
+  const selectedNotes = selected.filter((item) => item.hasNote);
+  const replacing = selectedNotes.length;
   const allSelected = pending.length > 0 && pending.every((item) => selection.includes(pick(item)));
   const stem = resource.split('/')[1];
   const isNote = resource.startsWith('notes/');
@@ -94,6 +98,17 @@ export default function Study({ course, active, reloadCourses, preparing }) {
     } catch (e) { setError(e.message); }
   }
 
+  async function remove() {
+    setDeleting(true);
+    setError('');
+    const failed = await deleteEach(removing.map((item) => `/api/local/courses/${encodeURIComponent(course.name)}/notes/${item.stem}`));
+    await reloadCourses().catch(() => {});
+    if (failed.length) setError(`${failed.length}개 노트를 삭제하지 못했습니다: ${failed[0]}`);
+    setSelection((current) => current.filter((key) => !removing.some((item) => pick(item) === key)));
+    setDeleting(false);
+    setRemoving(null);
+  }
+
   function toggle(key) {
     setSelection((current) => current.includes(key) ? current.filter((value) => value !== key) : [...current, key]);
   }
@@ -119,7 +134,10 @@ export default function Study({ course, active, reloadCourses, preparing }) {
       {course.lectures.length ? <>
         <div className="selection-heading"><h3>{allComplete ? '강의별 노트' : '정리할 강의'}</h3>{!allComplete || selected.length ? <span aria-live="polite">{selected.length}개 선택</span> : null}</div>
         <div className="selection-toolbar"><span>전사 완료 {course.lectures.length}개 · 노트 완료 {course.lectures.length - pending.length}개</span>
-          {pending.length > 0 ? <button className="text-button" disabled={locked} onClick={() => setSelection(allSelected ? [] : pending.map(pick))}>{allSelected ? '선택 해제' : '미정리 회차 전체 선택'}</button> : null}</div>
+          <span className="selection-actions">
+            {pending.length > 0 ? <button className="text-button" disabled={locked} onClick={() => setSelection(allSelected ? [] : pending.map(pick))}>{allSelected ? '선택 해제' : '미정리 회차 전체 선택'}</button> : null}
+            <button className="text-button danger" disabled={locked || !selectedNotes.length} onClick={() => setRemoving(selectedNotes)}>{selectedNotes.length ? `선택한 노트 ${selectedNotes.length}개 삭제` : '선택한 노트 삭제'}</button>
+          </span></div>
         <div className="lecture-grid" role="group" aria-label="정리할 회차">
           {course.lectures.map((item) => <article className={`lecture-tile${selected.some((value) => value.stem === item.stem) ? ' selected' : ''}${item.hasNote ? ' complete' : ''}`} key={item.stem}>
             <label className="lecture-select">
@@ -135,6 +153,10 @@ export default function Study({ course, active, reloadCourses, preparing }) {
       </> : <div className="study-empty"><h3>아직 전사된 강의가 없어요</h3><p>‘영상·교안 추가하기’에서 영상을 올려 주세요.<br />전사가 끝나면 여기에서 선택할 수 있습니다.</p><a className="secondary" href="#prepare-video">영상 전사하러 가기</a></div>}
     </div>
 
+    {removing ? <ConfirmDialog title={removing.length > 1 ? `노트 ${removing.length}개를 삭제할까요?` : '노트를 삭제할까요?'}
+      busy={deleting} onConfirm={remove} onCancel={() => setRemoving(null)}>
+      {removing.length > 1 ? `선택한 ${removing.length}개 회차의` : `${lectureLabel(removing[0].week, removing[0].session)}`} 노트를 지웁니다. 지운 노트는 output/{course.name}/notes/.history에 보관돼요.
+    </ConfirmDialog> : null}
     {isNote && active ? <Suspense fallback={<p role="status">노트 화면을 준비하는 중…</p>}><NoteReader key={`${course.name}:${stem}`} course={course.name} stem={stem} onClose={() => setResource('')} /></Suspense> : null}
     {resource && !isNote ? <div className="viewer study-viewer" ref={viewer}>
       <div className="viewer-head"><strong>전사체 · {lectureLabel(Number(stem.slice(5, 7)), Number(stem.slice(8, 10)))}</strong>

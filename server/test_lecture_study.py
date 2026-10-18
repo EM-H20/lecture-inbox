@@ -443,6 +443,20 @@ class NoteEditApiTests(WebTestCase):
         self.assertEqual(self.client.put(self.url, headers=H, json={'text': '수정', 'originalText': '보존'}).status_code, 404)
         self.assertEqual(other.read_text(), '보존')
 
+    def test_delete_archives_note_to_history(self):
+        self.assertEqual(self.client.delete(self.url).status_code, 403)
+        self.assertEqual(self.client.delete(self.url, headers=H).status_code, 200)
+        self.assertFalse(self.note.exists())
+        archived = list((self.note.parent / '.history').glob('week_01_01-*.md'))
+        self.assertEqual([path.read_text() for path in archived], [NOTE])
+        self.assertEqual(self.client.delete(self.url, headers=H).status_code, 404)
+        self.assertEqual(self.client.delete(self.url.replace('week_01_01', 'x'), headers=H).status_code, 422)
+
+    def test_delete_refused_while_a_job_runs(self):
+        self.client.app.state.study.job = {'status': 'running'}
+        self.assertEqual(self.client.delete(self.url, headers=H).status_code, 409)
+        self.assertEqual(self.note.read_text(), NOTE)
+
 
 if __name__ == '__main__':
     unittest.main()
