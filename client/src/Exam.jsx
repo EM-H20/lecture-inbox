@@ -131,7 +131,7 @@ export default function Exam({ course, active }) {
       {exams && !exams.length ? <p className="hint">아직 만든 시험지가 없어요. 아래에서 범위와 문제 수를 정해 만들어 보세요.</p> : null}
       {exams?.length ? <div className="selection-toolbar"><span>{checked.length ? `${checkedExams.length}개 선택` : `시험지 ${exams.length}개`}</span>
         <span className="exam-actions">
-          <button className="text-button" onClick={() => setChecked(allChecked ? [] : exams.map((item) => item.id))}>{allChecked ? '선택 해제' : '전체 선택'}</button>
+          <button className="text-button" onClick={() => setChecked(allChecked ? [] : exams.map((item) => item.id))}>{allChecked ? '전체 해제' : '전체 선택'}</button>
           <button className="text-button danger" disabled={!checkedExams.length} onClick={() => setRemoving(checkedExams)}>{checkedExams.length ? `선택한 시험지 ${checkedExams.length}개 삭제` : '선택한 시험지 삭제'}</button>
         </span></div> : null}
       {exams?.length ? <ul className="exam-list">{exams.map((item) => <li key={item.id}>

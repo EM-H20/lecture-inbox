@@ -70,6 +70,7 @@ export default function Study({ course, active, reloadCourses, preparing }) {
   const selectedNotes = selected.filter((item) => item.hasNote);
   const replacing = selectedNotes.length;
   const allSelected = pending.length > 0 && pending.every((item) => selection.includes(pick(item)));
+  const everySelected = course.lectures.length > 0 && course.lectures.every((item) => selection.includes(pick(item)));
   const stem = resource.split('/')[1];
   const isNote = resource.startsWith('notes/');
   const ready = state?.selectionSupported && selectedAgent?.available && selected.length > 0 && !locked && !preparing;
@@ -135,7 +136,8 @@ export default function Study({ course, active, reloadCourses, preparing }) {
         <div className="selection-heading"><h3>{allComplete ? '강의별 노트' : '정리할 강의'}</h3>{!allComplete || selected.length ? <span aria-live="polite">{selected.length}개 선택</span> : null}</div>
         <div className="selection-toolbar"><span>전사 완료 {course.lectures.length}개 · 노트 완료 {course.lectures.length - pending.length}개</span>
           <span className="selection-actions">
-            {pending.length > 0 ? <button className="text-button" disabled={locked} onClick={() => setSelection(allSelected ? [] : pending.map(pick))}>{allSelected ? '선택 해제' : '미정리 회차 전체 선택'}</button> : null}
+            {pending.length > 0 && !everySelected ? <button className="text-button" disabled={locked} onClick={() => setSelection(allSelected ? [] : pending.map(pick))}>{allSelected ? '선택 해제' : '미정리 회차 전체 선택'}</button> : null}
+            <button className="text-button" disabled={locked} onClick={() => setSelection(everySelected ? [] : course.lectures.map(pick))}>{everySelected ? '전체 해제' : '전체 선택'}</button>
             <button className="text-button danger" disabled={locked || !selectedNotes.length} onClick={() => setRemoving(selectedNotes)}>{selectedNotes.length ? `선택한 노트 ${selectedNotes.length}개 삭제` : '선택한 노트 삭제'}</button>
           </span></div>
         <div className="lecture-grid" role="group" aria-label="정리할 회차">

@@ -163,11 +163,12 @@ async (page) => {
     await confirmBox.getByRole('button', { name: '취소' }).click();
     await confirmBox.waitFor({ state: 'detached' });
     check(noteDeletes.length === 0, 'Cancel must not delete a note');
-    await section.getByRole('checkbox', { name: '1주차 1번째 강의 다시 정리 선택' }).check();
-    await removeNotes.click();
+    await section.getByRole('button', { name: '전체 선택', exact: true }).click();
+    check(await section.getByRole('checkbox', { checked: false }).count() === 0, 'Select all checks every lecture');
+    await section.getByRole('button', { name: '선택한 노트 4개 삭제' }).click();
     await confirmBox.getByRole('button', { name: '삭제', exact: true }).click();
     await section.getByRole('checkbox', { name: '4주차 1번째 강의 선택' }).waitFor();
-    check(noteDeletes.includes('week_01_01') && noteDeletes.includes('week_04_01'), `Bulk note delete: ${noteDeletes}`);
+    check(noteDeletes.sort().join() === 'week_01_01,week_02_01,week_03_01,week_04_01', `Bulk note delete: ${noteDeletes}`);
     empty = true;
     await p.getByRole('tab', { name: '학교 강의 받기' }).click();
     await p.getByRole('tab', { name: '전사·시험 정리' }).click();
