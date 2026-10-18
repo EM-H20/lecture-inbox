@@ -389,6 +389,20 @@ class ExamApiTests(WebTestCase):
         self.assertEqual(self.client.get('/api/local/courses/강의/exams', headers={'Host': 'evil.test'}).status_code, 403)
         self.assertEqual(self.client.get('/api/local/courses/없는 강의/exams').status_code, 404)
 
+    def test_delete_exam(self):
+        self.make_course()
+        exams = self.root / 'output' / '강의' / 'exams'
+        exams.mkdir(parents=True)
+        (exams / '20261015-140300.json').write_text(json.dumps(saved_exam(), ensure_ascii=False), encoding='utf-8')
+        (exams / '20261016-090000.json').write_text('{broken', encoding='utf-8')
+        path = '/api/local/courses/강의/exams/'
+        self.assertEqual(self.client.delete(path + '20261015-140300').status_code, 403)
+        self.assertEqual(self.client.delete(path + '20261015-140300', headers=H).status_code, 200)
+        self.assertEqual(self.client.delete(path + '20261016-090000', headers=H).status_code, 200)  # unreadable ones too
+        self.assertEqual(list(exams.iterdir()), [])
+        self.assertEqual(self.client.delete(path + '20261015-140300', headers=H).status_code, 404)
+        self.assertEqual(self.client.delete(path + 'not-an-id', headers=H).status_code, 422)
+
 
 if __name__ == '__main__':
     unittest.main()

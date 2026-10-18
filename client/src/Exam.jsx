@@ -19,6 +19,9 @@ export default function Exam({ course, active }) {
   const [agent, setAgent] = useState('');
   const [sending, setSending] = useState(false);
   const [open, setOpen] = useState('');
+  const [removing, setRemoving] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const confirmBox = useRef(null);
   const seen = useRef('');
   const form = useRef(null);
   const url = `/api/local/courses/${encodeURIComponent(course.name)}/exams`;
@@ -30,6 +33,7 @@ export default function Exam({ course, active }) {
   }, [url]);
 
   useEffect(() => { if (active) loadExams(); }, [active, loadExams]);
+  useEffect(() => { if (removing) confirmBox.current?.showModal(); }, [removing]);
 
   useEffect(() => {
     if (!active) return undefined;
@@ -83,6 +87,13 @@ export default function Exam({ course, active }) {
     } catch (e) { setError(e.message); }
   }
 
+  async function remove() {
+    setDeleting(true);
+    try { await localFetch(`${url}/${removing.id}`, { method: 'DELETE' }); await loadExams(); }
+    catch (e) { setListError(e.message); }
+    finally { setDeleting(false); setRemoving(null); }
+  }
+
   function reuse(settings) {
     setStems(settings.stems.filter((stem) => noted.some((lecture) => lecture.stem === stem)));
     setCounts(Object.fromEntries(TYPES.map((type) => [type, String(settings.counts[type] ?? 0)])));
@@ -113,10 +124,12 @@ export default function Exam({ course, active }) {
       {listError ? <p className="message error" role="alert">{listError}</p> : null}
       {exams && !exams.length ? <p className="hint">아직 만든 시험지가 없어요. 아래에서 범위와 문제 수를 정해 만들어 보세요.</p> : null}
       {exams?.length ? <ul className="exam-list">{exams.map((item) => <li key={item.id}>
-        {item.error ? <span><strong>{examTime(item.id)}</strong><small>{item.error}</small></span> : <>
+        {item.error ? <><span><strong>{examTime(item.id)}</strong><small>{item.error}</small></span>
+          <span className="exam-actions"><button className="text-button" onClick={() => setRemoving(item)}>삭제</button></span></> : <>
           <span><strong>{rangeSummary(item.settings.stems, course.lectures)}</strong>
             <small>{examTime(item.id)} · {countsLabel(item.settings.counts)} · {agentLabel(item.agent)}</small></span>
           <span className="exam-actions">
+            <button className="text-button" aria-label={`${examTime(item.id)} 시험지 삭제`} onClick={() => setRemoving(item)}>삭제</button>
             <button className="text-button" disabled={locked} onClick={() => reuse(item.settings)}>같은 설정으로 다시 만들기</button>
             <button className="secondary" aria-label={`${examTime(item.id)} 시험지 풀기`} onClick={() => setOpen(item.id)}>풀기</button>
           </span></>}
@@ -155,6 +168,15 @@ export default function Exam({ course, active }) {
         <button className="primary" aria-describedby="exam-next" disabled={!ready} onClick={start}>{sending ? '시작하는 중…' : '시험지 만들기'}</button></div>
       <p className="study-disclosure">선택한 회차의 정리 노트와 최근 시험지 5개가 해당 AI 서비스로 전송되며, 계정의 사용 한도가 적용됩니다.</p>
     </div>
+    {removing ? <dialog className="exam-confirm" ref={confirmBox} aria-labelledby="exam-confirm-title"
+      onCancel={(event) => { event.preventDefault(); if (!deleting) setRemoving(null); }}>
+      <h3 id="exam-confirm-title">시험지를 삭제할까요?</h3>
+      <p>{removing.error ? examTime(removing.id) : `${rangeSummary(removing.settings.stems, course.lectures)} · ${examTime(removing.id)}`} 시험지를 지웁니다. 삭제하면 되돌릴 수 없어요.</p>
+      <div className="exam-confirm-actions">
+        <button className="secondary" autoFocus disabled={deleting} onClick={() => setRemoving(null)}>취소</button>
+        <button className="primary" disabled={deleting} onClick={remove}>{deleting ? '삭제하는 중…' : '삭제'}</button>
+      </div>
+    </dialog> : null}
     {open ? <Suspense fallback={<p role="status">시험지를 여는 중…</p>}>
       <ExamSheet key={open} course={course.name} id={open} lectures={course.lectures} onClose={() => setOpen('')} /></Suspense> : null}
   </section>;

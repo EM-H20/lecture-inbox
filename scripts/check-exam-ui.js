@@ -21,6 +21,8 @@ async (page) => {
     + '## 1. 첫 개념\n\n첫 설명\n\n## 2. 둘째 개념\n\n둘째 설명\n\n## 예상문제와 해설\n\n### 1. 질문\n\n**정답:** 답\n\n## 불확실한 내용\n\n없음\n';
   let job = null;
   const posts = [];
+  const deletes = [];
+  let listed = true;
   const agents = [{ id: 'claude', label: 'Claude', available: true, login: 'claude auth login' }];
   p.on('dialog', (dialog) => dialog.accept());  // window.confirm prompts (grade with blanks, close with answers)
   try {
@@ -40,7 +42,12 @@ async (page) => {
         job = { id: 'abcdef0123456789', kind: 'exam', course: '시험강의', agent: 'claude', status: 'running', completed: 0, total: 1, stems: [], stem: '', error: '', elapsedSeconds: 5 };
         return route.fulfill({ status: 202, json: job });
       }
-      if (path.endsWith('/exams')) return route.fulfill({ json: { exams: [{ id: exam.id, createdAt: exam.createdAt, agent: 'claude', settings: exam.settings }] } });
+      if (path.endsWith(`/exams/${exam.id}`) && method === 'DELETE') {
+        deletes.push(path);
+        listed = false;
+        return route.fulfill({ json: { ok: true } });
+      }
+      if (path.endsWith('/exams')) return route.fulfill({ json: { exams: listed ? [{ id: exam.id, createdAt: exam.createdAt, agent: 'claude', settings: exam.settings }] : [] } });
       if (path.endsWith(`/exams/${exam.id}`)) return route.fulfill({ json: exam });
       if (path.includes('/notes/')) return route.fulfill({ json: { stem: 'week_01_01', text: note } });
       if (path.includes('/transcripts/')) return route.fulfill({ json: { stem: 'week_01_01', text: '[00:00:00] 내용' } });
@@ -129,6 +136,18 @@ async (page) => {
     await sheet.getByLabel('4번 답').fill('답');
     await sheet.getByRole('button', { name: '닫기' }).click();
     await sheet.waitFor({ state: 'detached' });
+
+    // 삭제 asks in a modal first: 취소 keeps the exam, 삭제 removes it and refreshes the list.
+    await panel.getByRole('button', { name: /시험지 삭제/ }).click();
+    const confirmBox = p.getByRole('dialog', { name: '시험지를 삭제할까요?' });
+    await confirmBox.waitFor();
+    await confirmBox.getByRole('button', { name: '취소' }).click();
+    await confirmBox.waitFor({ state: 'detached' });
+    check(deletes.length === 0, 'Cancel does not delete');
+    await panel.getByRole('button', { name: /시험지 삭제/ }).click();
+    await confirmBox.getByRole('button', { name: '삭제', exact: true }).click();
+    await panel.getByText(/아직 만든 시험지가 없어요/).waitFor();
+    check(deletes.length === 1 && deletes[0].endsWith(`/exams/${exam.id}`), `DELETE sent: ${deletes}`);
   } finally {
     await context.close();
   }

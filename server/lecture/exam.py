@@ -178,3 +178,12 @@ def read_exam(root, course, exam_id):
     if not EXAM_ID.match(exam_id) or not path.is_file():
         raise FileNotFoundError(exam_id)
     return load_exam(path)
+
+
+def delete_exam(root, course, exam_id):
+    """Removes a saved exam, readable or not; False when there was none."""
+    path = exams_dir(root, course) / f"{exam_id}.json"
+    if not EXAM_ID.match(exam_id) or not path.is_file():
+        return False
+    path.unlink(missing_ok=True)
+    return True

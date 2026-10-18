@@ -22,7 +22,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from server.lecture.catalog import list_courses
-from server.lecture.exam import MAX_MEMO, MAX_PER_TYPE, list_exams, read_exam
+from server.lecture.exam import MAX_MEMO, MAX_PER_TYPE, delete_exam, list_exams, read_exam
 from server.lecture.layout import LayoutError, documents_dir, pages_dir, safe_document, sources_dir, transcript_dir
 from server.lecture.pdf import MAX_BYTES as MAX_PDF_BYTES
 from server.lecture.pdf import MAX_PAGES, PdfError, delete_document, prepare_document
@@ -219,6 +219,15 @@ def create_router() -> APIRouter:
             raise HTTPException(404, "시험지를 찾을 수 없습니다. 목록을 새로고침해 주세요.") from None
         except ValueError:
             raise HTTPException(422, "읽을 수 없는 시험지입니다. 파일이 손상되었거나 지원하지 않는 형식입니다.") from None
+
+    @router.delete("/courses/{course}/exams/{exam_id}")
+    def remove_exam(course: str = PathParam(min_length=1, max_length=100),
+                    exam_id: str = PathParam(pattern=r"^[0-9]{8}-[0-9]{6}$"),
+                    transcriber: Transcriber = Depends(get_transcriber)):
+        folder = course_folder(transcriber, course)
+        if not delete_exam(transcriber.root, folder.name, exam_id):
+            raise HTTPException(404, "시험지를 찾을 수 없습니다. 목록을 새로고침해 주세요.")
+        return {"ok": True}
 
     @router.post("/courses/{course}/exams", status_code=202)
     def start_exam(body: ExamBody, request: Request, course: str = PathParam(min_length=1, max_length=100),
