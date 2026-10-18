@@ -125,11 +125,11 @@ export default function Exam({ course, active }) {
       {exams && !exams.length ? <p className="hint">아직 만든 시험지가 없어요. 아래에서 범위와 문제 수를 정해 만들어 보세요.</p> : null}
       {exams?.length ? <ul className="exam-list">{exams.map((item) => <li key={item.id}>
         {item.error ? <><span><strong>{examTime(item.id)}</strong><small>{item.error}</small></span>
-          <span className="exam-actions"><button className="text-button" onClick={() => setRemoving(item)}>삭제</button></span></> : <>
+          <span className="exam-actions"><button className="text-button exam-delete" onClick={() => setRemoving(item)}>삭제</button></span></> : <>
           <span><strong>{rangeSummary(item.settings.stems, course.lectures)}</strong>
             <small>{examTime(item.id)} · {countsLabel(item.settings.counts)} · {agentLabel(item.agent)}</small></span>
           <span className="exam-actions">
-            <button className="text-button" aria-label={`${examTime(item.id)} 시험지 삭제`} onClick={() => setRemoving(item)}>삭제</button>
+            <button className="text-button exam-delete" aria-label={`${examTime(item.id)} 시험지 삭제`} onClick={() => setRemoving(item)}>삭제</button>
             <button className="text-button" disabled={locked} onClick={() => reuse(item.settings)}>같은 설정으로 다시 만들기</button>
             <button className="secondary" aria-label={`${examTime(item.id)} 시험지 풀기`} onClick={() => setOpen(item.id)}>풀기</button>
           </span></>}
@@ -174,7 +174,7 @@ export default function Exam({ course, active }) {
       <p>{removing.error ? examTime(removing.id) : `${rangeSummary(removing.settings.stems, course.lectures)} · ${examTime(removing.id)}`} 시험지를 지웁니다. 삭제하면 되돌릴 수 없어요.</p>
       <div className="exam-confirm-actions">
         <button className="secondary" autoFocus disabled={deleting} onClick={() => setRemoving(null)}>취소</button>
-        <button className="primary" disabled={deleting} onClick={remove}>{deleting ? '삭제하는 중…' : '삭제'}</button>
+        <button className="primary exam-delete-confirm" disabled={deleting} onClick={remove}>{deleting ? '삭제하는 중…' : '삭제'}</button>
       </div>
     </dialog> : null}
     {open ? <Suspense fallback={<p role="status">시험지를 여는 중…</p>}>

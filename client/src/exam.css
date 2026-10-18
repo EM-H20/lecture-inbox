@@ -5,6 +5,10 @@
 .exam-list li > span:first-child { display: grid; gap: 4px; min-width: 0; }
 .exam-list small, .exam-option small, .exam-counts legend span { color: var(--color-muted); font-size: 13px; font-weight: 400; }
 .exam-actions { display: flex; gap: 12px; align-items: center; flex-shrink: 0; }
+.exam-delete { color: #b42318; font-weight: 600; }
+.exam-delete:not(:disabled):hover { text-decoration: underline; }
+.exam-delete-confirm { background: #b42318; }
+.exam-delete-confirm:not(:disabled):hover { background: #912018; }
 .exam-confirm { width: min(400px, calc(100% - 32px)); padding: 24px; border: 1px solid var(--color-border); border-radius: var(--radius-button); background: var(--color-surface); color: var(--color-ink); }
 .exam-confirm::backdrop { background: rgb(0 0 0 / .4); }
 .exam-confirm p { margin: 0 0 20px; font-size: 14px; line-height: 1.6; }
