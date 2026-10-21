@@ -22,7 +22,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from server.lecture.catalog import list_courses
-from server.lecture.exam import MAX_MEMO, MAX_PER_TYPE, delete_exam, list_exams, read_exam
+from server.lecture.exam import MAX_MEMO, MAX_PER_TYPE, delete_exam, list_exams, read_exam, save_exam_order
 from server.lecture.layout import LayoutError, documents_dir, pages_dir, safe_document, sources_dir, transcript_dir
 from server.lecture.pdf import MAX_BYTES as MAX_PDF_BYTES
 from server.lecture.pdf import MAX_PAGES, PdfError, delete_document, prepare_document
@@ -70,6 +70,10 @@ class ExamBody(BaseModel):
     counts: ExamCounts
     emphasis: bool = True
     memo: str = Field(default="", max_length=MAX_MEMO)
+
+
+class ExamOrderBody(BaseModel):
+    ids: list[Annotated[str, Field(pattern=r"^[0-9]{8}-[0-9]{6}$")]] = Field(max_length=10_000)
 
 
 class NoteBody(BaseModel):
@@ -207,6 +211,13 @@ def create_router() -> APIRouter:
               transcriber: Transcriber = Depends(get_transcriber)):
         folder = course_folder(transcriber, course)
         return {"exams": list_exams(transcriber.root, folder.name)}
+
+    @router.put("/courses/{course}/exams/order")
+    def order_exams(body: ExamOrderBody, course: str = PathParam(min_length=1, max_length=100),
+                    transcriber: Transcriber = Depends(get_transcriber)):
+        folder = course_folder(transcriber, course)
+        save_exam_order(transcriber.root, folder.name, body.ids)
+        return {"ok": True}
 
     @router.get("/courses/{course}/exams/{exam_id}")
     def exam(course: str = PathParam(min_length=1, max_length=100),

@@ -2,8 +2,10 @@
 .exam h3 { font-size: 16px; font-weight: 600; margin: 0 0 12px; }
 .exam-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--color-border); }
 .exam-list li { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--color-border); }
-.exam-list li > span:first-of-type { display: grid; gap: 4px; min-width: 0; flex: 1; }
+.exam-list li > .exam-order + span { display: grid; gap: 4px; min-width: 0; flex: 1; }
 .exam-list li > input[type="checkbox"] { margin: 0; }
+.exam-order { display: flex; flex-direction: column; }
+.exam-order button { padding: 0 4px; line-height: 1.2; }
 .exam-list small, .exam-option small, .exam-counts legend span { color: var(--color-muted); font-size: 13px; font-weight: 400; }
 .exam-actions { display: flex; gap: 12px; align-items: center; flex-shrink: 0; }
 .exam-range, .exam-counts { border: 0; padding: 0; margin: 0 0 20px; min-width: 0; }

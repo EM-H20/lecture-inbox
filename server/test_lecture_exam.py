@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from server.lecture.exam import (exam_problems, exam_prompt, list_exams, note_concepts, parse_response,
-                                 read_exam, recent_exams)
+                                 read_exam, recent_exams, save_exam_order)
 from server.lecture.layout import LayoutError
 from server.lecture.study import ACTIVE, StudyRunner
 from server.lecture_testing import wait_for
@@ -175,6 +175,16 @@ class ExamStoreTests(ExamRoot):
                     read_exam(self.root, '강의', exam_id)
                 listed = {item['id']: item for item in list_exams(self.root, '강의')}
                 self.assertIn('error', listed[exam_id])
+
+    def test_saved_order_puts_new_exams_first_and_skips_deleted_ones(self):
+        for exam_id in ('20261001-000000', '20261002-000000', '20261003-000000', '20261004-000000'):
+            self.write_exam(exam_id, saved_exam())
+        save_exam_order(self.root, '강의', ['20261001-000000', '20261099-000000', '20261003-000000', '20261002-000000'])
+        self.assertEqual([item['id'] for item in list_exams(self.root, '강의')],
+                         ['20261004-000000', '20261001-000000', '20261003-000000', '20261002-000000'])
+        self.assertEqual(recent_exams(self.root, '강의')[0], 'output/강의/exams/20261004-000000.json')  # still by date
+        (self.root / 'output' / '강의' / 'exams' / 'order.json').write_text('{broken', encoding='utf-8')
+        self.assertEqual(len(list_exams(self.root, '강의')), 4)  # a broken order file falls back to newest first
 
     def test_recent_exams_are_the_latest_five(self):
         for day in range(1, 8):
@@ -402,6 +412,21 @@ class ExamApiTests(WebTestCase):
         self.assertEqual(list(exams.iterdir()), [])
         self.assertEqual(self.client.delete(path + '20261015-140300', headers=H).status_code, 404)
         self.assertEqual(self.client.delete(path + 'not-an-id', headers=H).status_code, 422)
+
+    def test_save_exam_order(self):
+        self.make_course()
+        exams = self.root / 'output' / '강의' / 'exams'
+        exams.mkdir(parents=True)
+        for exam_id in ('20261015-140300', '20261016-090000'):
+            (exams / f'{exam_id}.json').write_text(json.dumps(saved_exam(), ensure_ascii=False), encoding='utf-8')
+        path = '/api/local/courses/강의/exams/order'
+        ids = ['20261015-140300', '20261016-090000']
+        self.assertEqual(self.client.put(path, json={'ids': ids}).status_code, 403)
+        self.assertEqual(self.client.put(path, headers=H, json={'ids': ids}).status_code, 200)
+        listed = self.client.get('/api/local/courses/강의/exams').json()['exams']
+        self.assertEqual([item['id'] for item in listed], ids)
+        self.assertEqual(self.client.put(path, headers=H, json={'ids': ['../evil']}).status_code, 422)
+        self.assertEqual(self.client.put('/api/local/courses/없는 강의/exams/order', headers=H, json={'ids': ids}).status_code, 404)
 
 
 if __name__ == '__main__':

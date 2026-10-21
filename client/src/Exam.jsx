@@ -96,6 +96,13 @@ export default function Exam({ course, active }) {
     setDeleting(false);
     setRemoving(null);
   }
+  async function move(index, delta) {
+    const next = [...exams];
+    [next[index], next[index + delta]] = [next[index + delta], next[index]];
+    setExams(next);
+    try { await localFetch(`${url}/order`, { method: 'PUT', json: { ids: next.map((item) => item.id) } }); }
+    catch (e) { setListError(`순서를 저장하지 못했습니다: ${e.message}`); await loadExams(); }
+  }
   const checkedExams = exams?.filter((item) => checked.includes(item.id)) ?? [];
   const allChecked = Boolean(exams?.length) && checkedExams.length === exams.length;
   const examName = (item) => item.error ? examTime(item.id) : `${rangeSummary(item.settings.stems, course.lectures)} · ${examTime(item.id)}`;
@@ -134,7 +141,11 @@ export default function Exam({ course, active }) {
           <button className="text-button" onClick={() => setChecked(allChecked ? [] : exams.map((item) => item.id))}>{allChecked ? '전체 해제' : '전체 선택'}</button>
           <button className="text-button danger" disabled={!checkedExams.length} onClick={() => setRemoving(checkedExams)}>{checkedExams.length ? `선택한 시험지 ${checkedExams.length}개 삭제` : '선택한 시험지 삭제'}</button>
         </span></div> : null}
-      {exams?.length ? <ul className="exam-list">{exams.map((item) => <li key={item.id}>
+      {exams?.length ? <ul className="exam-list">{exams.map((item, index) => <li key={item.id}>
+        <span className="exam-order">
+          <button className="text-button" aria-label={`${examTime(item.id)} 시험지 위로`} disabled={!index} onClick={() => move(index, -1)}>↑</button>
+          <button className="text-button" aria-label={`${examTime(item.id)} 시험지 아래로`} disabled={index === exams.length - 1} onClick={() => move(index, 1)}>↓</button>
+        </span>
         <input type="checkbox" aria-label={`${examTime(item.id)} 시험지 선택`} checked={checked.includes(item.id)}
           onChange={() => setChecked((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])} />
         {item.error ? <span><strong>{examTime(item.id)}</strong><small>{item.error}</small></span> : <>
