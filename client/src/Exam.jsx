@@ -23,6 +23,8 @@ export default function Exam({ course, active }) {
   const [checked, setChecked] = useState([]);
   const [removing, setRemoving] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [dragId, setDragId] = useState('');
+  const dragging = useRef(null);
   const seen = useRef('');
   const form = useRef(null);
   const url = `/api/local/courses/${encodeURIComponent(course.name)}/exams`;
@@ -96,12 +98,22 @@ export default function Exam({ course, active }) {
     setDeleting(false);
     setRemoving(null);
   }
-  async function move(index, delta) {
-    const next = [...exams];
-    [next[index], next[index + delta]] = [next[index + delta], next[index]];
-    setExams(next);
+  async function saveOrder(next) {
     try { await localFetch(`${url}/order`, { method: 'PUT', json: { ids: next.map((item) => item.id) } }); }
     catch (e) { setListError(`순서를 저장하지 못했습니다: ${e.message}`); await loadExams(); }
+  }
+  // Moves the dragged item on screen only; the order is saved once when the drag ends.
+  function place(from, to) {
+    if (from === to || from < 0) return;
+    const next = [...exams];
+    next.splice(to, 0, next.splice(from, 1)[0]);
+    setExams(next);
+  }
+  function dragEnd() {
+    const order = exams.map((item) => item.id).join();
+    if (order !== dragging.current?.order) saveOrder(exams);
+    dragging.current = null;
+    setDragId('');
   }
   const checkedExams = exams?.filter((item) => checked.includes(item.id)) ?? [];
   const allChecked = Boolean(exams?.length) && checkedExams.length === exams.length;
@@ -141,11 +153,11 @@ export default function Exam({ course, active }) {
           <button className="text-button" onClick={() => setChecked(allChecked ? [] : exams.map((item) => item.id))}>{allChecked ? '전체 해제' : '전체 선택'}</button>
           <button className="text-button danger" disabled={!checkedExams.length} onClick={() => setRemoving(checkedExams)}>{checkedExams.length ? `선택한 시험지 ${checkedExams.length}개 삭제` : '선택한 시험지 삭제'}</button>
         </span></div> : null}
-      {exams?.length ? <ul className="exam-list">{exams.map((item, index) => <li key={item.id}>
-        <span className="exam-order">
-          <button className="text-button" aria-label={`${examTime(item.id)} 시험지 위로`} disabled={!index} onClick={() => move(index, -1)}>↑</button>
-          <button className="text-button" aria-label={`${examTime(item.id)} 시험지 아래로`} disabled={index === exams.length - 1} onClick={() => move(index, 1)}>↓</button>
-        </span>
+      {exams?.length ? <ul className="exam-list">{exams.map((item, index) => <li key={item.id} draggable
+        className={dragId === item.id ? 'is-dragging' : undefined}
+        onDragStart={(event) => { dragging.current = { order: exams.map((exam) => exam.id).join() }; setDragId(item.id); event.dataTransfer.effectAllowed = 'move'; }}
+        onDragOver={(event) => { if (!dragId) return; event.preventDefault(); place(exams.findIndex((exam) => exam.id === dragId), index); }}
+        onDrop={(event) => event.preventDefault()} onDragEnd={dragEnd}>
         <input type="checkbox" aria-label={`${examTime(item.id)} 시험지 선택`} checked={checked.includes(item.id)}
           onChange={() => setChecked((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])} />
         {item.error ? <span><strong>{examTime(item.id)}</strong><small>{item.error}</small></span> : <>
