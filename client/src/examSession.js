@@ -86,3 +86,10 @@ export function rangeSummary(stems, lectures) {
 export const examTime = (id) => `${Number(id.slice(4, 6))}월 ${Number(id.slice(6, 8))}일 ${id.slice(9, 11)}:${id.slice(11, 13)}`;
 
 export const sourceLabel = (source) => `${lectureOf(source.stem)} · 개념 ${source.concept}`;
+
+// Questions may quote a note's page image (`![캡션](<경로>)`). Pull those out so the sheet can show the picture.
+const FIGURE = /!\[((?:\\.|[^\]\\])*)\]\((?:<([^>]+)>|([^)\s]+))\)/g;
+export function questionFigures(text) {
+  const figures = [...text.matchAll(FIGURE)].map((match) => ({ alt: match[1].replace(/\\(.)/g, '$1'), path: match[2] ?? match[3] }));
+  return { text: text.replace(FIGURE, ' ').replace(/\s+/g, ' ').trim(), figures };
+}

@@ -1,18 +1,25 @@
 import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { localFetch } from './localApi.js';
-import { TYPES, TYPE_LABELS, arrange, isBlank, rangeSummary, result, score, sourceLabel, wrongOnly } from './examSession.js';
+import { TYPES, TYPE_LABELS, arrange, isBlank, questionFigures, rangeSummary, result, score, sourceLabel, wrongOnly } from './examSession.js';
+import { pageImageUrl } from './noteDocument.js';
 import './note-reader.css';
 import './exam.css';
 const NoteReader = lazy(() => import('./NoteReader.jsx'));
 const MARKS = ['①', '②', '③', '④'];
 
-function Question({ number, item, question, response, mark, graded, onAnswer, onMark, onSource }) {
+function Question({ course, number, item, question, response, mark, graded, onAnswer, onMark, onSource }) {
   const verdict = graded ? result(question, response, mark) : undefined;
   const id = `exam-q-${item.index}`;
   const written = question.type === 'short' || question.type === 'essay';
+  const { text, figures } = questionFigures(question.question);
   return <section className={`exam-question${verdict === true ? ' is-correct' : verdict === false ? ' is-wrong' : ''}`} aria-labelledby={id}>
-    <h3 id={id}>{number}. {question.question}</h3>
+    <h3 id={id}>{number}. {text}</h3>
+    {figures.map(({ alt, path }) => {
+      const src = pageImageUrl(path, course);
+      return src ? <span key={path} className="note-figure"><img src={src} alt={alt || '교안 페이지'} loading="lazy" /></span>
+        : <span key={path} className="note-image-error">허용된 교안 이미지 경로가 아닙니다. {alt}</span>;
+    })}
     {question.type === 'mcq' ? <div className="exam-choices" role="radiogroup" aria-labelledby={id}>{item.choices.map((original, position) =>
       <label key={original} className={graded && original === question.answer ? 'is-answer' : ''}>
         <input type="radio" name={id} checked={response === original} disabled={graded} onChange={() => onAnswer(original)} />
@@ -127,7 +134,7 @@ export default function ExamSheet({ course, id, lectures, onClose }) {
             const firstOfType = !onlyWrong && sheet.findIndex((entry) => entry.type === item.type) === number - 1;
             return <React.Fragment key={item.index}>
               {firstOfType ? <h2 className="exam-type">{TYPE_LABELS[item.type]}</h2> : null}
-              <Question number={number} item={item} question={exam.questions[item.index]} response={responses[item.index]}
+              <Question course={course} number={number} item={item} question={exam.questions[item.index]} response={responses[item.index]}
                 mark={marks[item.index]} graded={graded}
                 onAnswer={(value) => setResponses((current) => ({ ...current, [item.index]: value }))}
                 onMark={(value) => setMarks((current) => ({ ...current, [item.index]: value }))}

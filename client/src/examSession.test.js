@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { arrange, countsLabel, examTime, handoutStems, isBlank, parseCounts, rangeSummary, result, score,
-  shuffle, sourceLabel, weekStems, wrongOnly } from './examSession.js';
+  questionFigures, shuffle, sourceLabel, weekStems, wrongOnly } from './examSession.js';
 
 const src = { stem: 'week_01_01', concept: 1 };
 const questions = [
@@ -99,4 +99,14 @@ test('range summary names the whole course, a handout, or the first lecture', ()
 test('labels for ids and sources', () => {
   assert.equal(examTime('20261015-140300'), '10월 15일 14:03');
   assert.equal(sourceLabel({ stem: 'week_03_01', concept: 2 }), '3주차·1 · 개념 2');
+});
+
+test('questionFigures pulls note-style page images out of the question text', () => {
+  const text = '그림은 외관입니다. 방식은? ![수동 머신 \\[레버\\] — 교안 p.15](<../../../sources/바리스타/pages/01_에스프레소 및 관리/p015.png>)';
+  assert.deepEqual(questionFigures(text), {
+    text: '그림은 외관입니다. 방식은?',
+    figures: [{ alt: '수동 머신 [레버] — 교안 p.15', path: '../../../sources/바리스타/pages/01_에스프레소 및 관리/p015.png' }],
+  });
+  assert.deepEqual(questionFigures('![a](../x/p001.png) 앞뒤 ![b](<y>)').figures.map((f) => f.path), ['../x/p001.png', 'y']);
+  assert.deepEqual(questionFigures('그림 없음'), { text: '그림 없음', figures: [] });
 });
